@@ -3,7 +3,9 @@ AI4ER GTC - Sea Ice Classification
 Script for feeding training and validation data into 
 unet or resnet34 model and saving the model output to wandb
 """
+# %%
 import pandas as pd
+import matplotlib
 import pytorch_lightning as pl
 import wandb
 from argparse import ArgumentParser
@@ -11,18 +13,18 @@ from torch import nn
 from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pathlib import Path
-
+# %%
 from constants import new_classes
 from util import SeaIceDataset, Visualise
 from model import Segmentation, UNet
-
+# %%
 import segmentation_models_pytorch as smp
-
+# %%
 
 if __name__ == '__main__':
 
     # parse command line arguments
-    parser = ArgumentParser(description="Sea Ice Segmentation Train")
+    parser = ArgumentParser(description="OpenSendaiBench")
     parser.add_argument("--name", default="default", type=str, help="Name of wandb run")
     parser.add_argument("--model", default="unet", type=str,
                         help="Either 'unet' or smp decoder 'resnet34'"
