@@ -1,4 +1,5 @@
 labels = {'AFG': ['A', 'C3L', 'RS', 'S', 'UFB']}
+# labels = {'AFG': ['C3L']}
 
 
 # source file pairs 
