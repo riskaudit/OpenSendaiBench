@@ -121,7 +121,8 @@ class OpenSendaiBenchDataset(Dataset):
 train_ds = OpenSendaiBenchDataset( obsvariables_path="/obsvariables/", 
                                         groundtruth_path="/groundtruth/", 
                                         country='AFG', 
-                                        signals = ['VH','VV','aerosol','blue','green','red','red1','red2','red3','nir','red4','vapor','swir1','swir2'])
+                                        signals = ['blue','green','red'])
+                                        # signals = ['VH','VV','aerosol','blue','green','red','red1','red2','red3','nir','red4','vapor','swir1','swir2'])
 print(train_ds[1]['groundtruth'].shape)
 print(train_ds[1]['obsvariable'].shape)
 # %%
@@ -132,7 +133,7 @@ train_dl.dataset[1]['groundtruth'].shape
 class UNet(nn.Module):
     def __init__(self, n_class):
         super().__init__()
-        self.e11 = nn.Conv2d(14, 64, kernel_size=5, padding=1)
+        self.e11 = nn.Conv2d(3, 64, kernel_size=5, padding=1)
         self.e12 = nn.Conv2d(64, 128, kernel_size=5, padding=1)
         self.upconv1 = nn.ConvTranspose2d(128, 64, kernel_size=6)
         self.outconv = nn.Conv2d(64, n_class, kernel_size=2)
@@ -141,14 +142,14 @@ class UNet(nn.Module):
         xe11 = relu(self.e11(x))
         xe12 = relu(self.e12(xe11))
         xu1 = self.upconv1(xe12)
-        out = F.avg_pool2d(self.outconv(xu1),(46,46),46, divisor_override=1)
+        out = F.avg_pool2d(self.outconv(xu1),(46,46),46) #, divisor_override=1)
 
         return out
 # %%
 model = UNet(n_class=len(labels['AFG'])).to(device)
 print(model)
 # %%
-summary(model, input_size=(14, 368, 368))
+summary(model, input_size=(3, 368, 368))
 # %%
 loss_func = nn.L1Loss()
 iterator = iter(train_dl)
@@ -229,22 +230,25 @@ _model.load_state_dict(weights)
 _model.eval()
 _model.to(device)
 # %%
-n = 2
+n = 21
 x = train_ds[n]['obsvariable'].unsqueeze(0).type(torch.float).to(device)
 print(x.shape)
 y = train_ds[n]['groundtruth'].to(device)
 output=_model(x)
 print(output.shape)
-fig, ((ax1,ax2,ax3,ax4,ax5),
-      (ax6,ax7,ax8,ax9,ax10)) = plt.subplots(nrows=2, ncols=5)
+# fig, ((ax1,ax2,ax3,ax4,ax5),
+#       (ax6,ax7,ax8,ax9,ax10)) = plt.subplots(nrows=2, ncols=5)
+# ax1.imshow(output[0,0,:,:].cpu().detach().numpy())
+# ax2.imshow(output[0,1,:,:].cpu().detach().numpy())
+# ax3.imshow(output[0,2,:,:].cpu().detach().numpy())
+# ax4.imshow(output[0,3,:,:].cpu().detach().numpy())
+# ax5.imshow(output[0,4,:,:].cpu().detach().numpy())
+# ax6.imshow(y[0,:,:].cpu().detach().numpy())
+# ax7.imshow(y[1,:,:].cpu().detach().numpy())
+# ax8.imshow(y[2,:,:].cpu().detach().numpy())
+# ax9.imshow(y[3,:,:].cpu().detach().numpy())
+# ax10.imshow(y[4,:,:].cpu().detach().numpy())
+fig, (ax1, ax6) = plt.subplots(nrows=1, ncols=2)
 ax1.imshow(output[0,0,:,:].cpu().detach().numpy())
-ax2.imshow(output[0,1,:,:].cpu().detach().numpy())
-ax3.imshow(output[0,2,:,:].cpu().detach().numpy())
-ax4.imshow(output[0,3,:,:].cpu().detach().numpy())
-ax5.imshow(output[0,4,:,:].cpu().detach().numpy())
 ax6.imshow(y[0,:,:].cpu().detach().numpy())
-ax7.imshow(y[1,:,:].cpu().detach().numpy())
-ax8.imshow(y[2,:,:].cpu().detach().numpy())
-ax9.imshow(y[3,:,:].cpu().detach().numpy())
-ax10.imshow(y[4,:,:].cpu().detach().numpy())
 # %%
