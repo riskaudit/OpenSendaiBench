@@ -9,6 +9,7 @@ from skimage import io
 import rioxarray as rxr
 import copy
 import time
+from datetime import datetime
 from collections import defaultdict
 import numpy as np
 from PIL import Image 
@@ -30,6 +31,8 @@ from torchsummary import summary
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+# %%
+device = torch.device("mps")
 # %%
 class OpenSendaiBenchDataset(Dataset):
     """
@@ -138,11 +141,11 @@ class UNet(nn.Module):
         xe11 = relu(self.e11(x))
         xe12 = relu(self.e12(xe11))
         xu1 = self.upconv1(xe12)
-        out = F.avg_pool2d(self.outconv(xu1),(46,46),46)
+        out = F.avg_pool2d(self.outconv(xu1),(46,46),46, divisor_override=1)
 
         return out
 # %%
-model = UNet(n_class=len(labels['AFG']))
+model = UNet(n_class=len(labels['AFG'])).to(device)
 print(model)
 # %%
 summary(model, input_size=(14, 368, 368))
@@ -152,8 +155,8 @@ iterator = iter(train_dl)
 
 for batch_idx in range(len(train_dl)):
     data_batch = next(iterator)
-    xb = data_batch['obsvariable'].type(torch.float)
-    yb = data_batch['groundtruth'].type(torch.float)
+    xb = data_batch['obsvariable'].type(torch.float).to(device)
+    yb = data_batch['groundtruth'].type(torch.float).to(device)
     out = model(xb)
     loss = loss_func(out, yb)
     print(loss)
@@ -165,4 +168,83 @@ loss.backward()
 opt = optim.Adam(model.parameters(), lr=1e-4)
 opt.step()
 opt.zero_grad()
+# %%
+class RMSELoss(nn.Module):
+    def __init__(self, eps=1e-6):
+        super().__init__()
+        self.mse = nn.MSELoss()
+        self.eps = eps
+    def forward(self,yhat,y):
+        loss = torch.sqrt(self.mse(yhat,y) + self.eps)
+        return loss
+rmse = RMSELoss()
+def metrics_batch(target, output):
+    return rmse(output,target)
+def loss_batch(loss_func, xb, yb,yb_h, opt=None):
+    loss = loss_func(yb_h, yb)
+    metric_b = metrics_batch(yb,yb_h)
+    if opt is not None:
+        loss.backward()
+        opt.step()
+        opt.zero_grad()
+    return loss.item(), metric_b
+def loss_epoch(model,loss_func,dataset_dl,opt=None):
+    loss=0.0
+    metric=0.0
+    iterator = iter(train_dl)
+    len_data = len(train_dl.dataset)
+    for batch_idx in range(len(train_dl)):
+        data_batch = next(iterator)
+        xb = data_batch['obsvariable'].type(torch.float).to(device)
+        yb = data_batch['groundtruth'].type(torch.float).to(device)
+        yb_h = model(xb)
+        loss_b,metric_b=loss_batch(loss_func, xb, yb,yb_h, opt)
+        loss+=loss_b
+        if metric_b is not None:
+            metric+=metric_b
+    loss/=len_data
+    metric/=len_data
+    return loss, metric
+def train_val(epochs, model, loss_func, opt, train_dl, val_dl):
+    for epoch in range(epochs):
+        model.train()
+        train_loss, train_metric=loss_epoch(model,loss_func,train_dl,opt)
+        model.eval()
+        with torch.no_grad():
+            val_loss, val_metric=loss_epoch(model,loss_func,val_dl)
+        accuracy=val_metric #100*val_metric
+        print("epoch: %d, train loss: %.6f, val loss: %.6f, rmse: %.2f" %(epoch, train_loss,val_loss,accuracy))
+# %%
+num_epochs=25
+train_val(num_epochs, model, loss_func, opt, train_dl, val_dl=train_dl)
+# %%
+path2weights=str("./models/weights_"
+                 +datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
+                 +"_epoch_"+str(num_epochs)+".pt")
+torch.save(model.state_dict(), path2weights)
+# %%
+_model = UNet(n_class=len(labels['AFG']))
+weights=torch.load(path2weights)
+_model.load_state_dict(weights)
+_model.eval()
+_model.to(device)
+# %%
+n = 4
+x = train_ds[n]['obsvariable'].unsqueeze(0).type(torch.float).to(device)
+print(x.shape)
+y = train_ds[n]['groundtruth'].to(device)
+output=_model(x)
+print(output.shape)
+fig, ((ax1,ax2,ax3,ax4,ax5),
+      (ax6,ax7,ax8,ax9,ax10)) = plt.subplots(nrows=2, ncols=5)
+ax1.imshow(output[0,0,:,:].cpu().detach().numpy())
+ax2.imshow(output[0,1,:,:].cpu().detach().numpy())
+ax3.imshow(output[0,2,:,:].cpu().detach().numpy())
+ax4.imshow(output[0,3,:,:].cpu().detach().numpy())
+ax5.imshow(output[0,4,:,:].cpu().detach().numpy())
+ax6.imshow(y[0,:,:].cpu().detach().numpy())
+ax7.imshow(y[1,:,:].cpu().detach().numpy())
+ax8.imshow(y[2,:,:].cpu().detach().numpy())
+ax9.imshow(y[3,:,:].cpu().detach().numpy())
+ax10.imshow(y[4,:,:].cpu().detach().numpy())
 # %%
