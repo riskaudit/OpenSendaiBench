@@ -229,7 +229,7 @@ _model.load_state_dict(weights)
 _model.eval()
 _model.to(device)
 # %%
-n = 4
+n = 2
 x = train_ds[n]['obsvariable'].unsqueeze(0).type(torch.float).to(device)
 print(x.shape)
 y = train_ds[n]['groundtruth'].to(device)
