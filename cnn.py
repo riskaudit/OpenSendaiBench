@@ -130,21 +130,207 @@ train_dl = DataLoader(train_ds, batch_size=10, shuffle=True)
 len(train_dl)
 train_dl.dataset[1]['groundtruth'].shape
 # %%
+# class UNet(nn.Module):
+#     def __init__(self, n_class):
+#         super().__init__()
+#         self.e11 = nn.Conv2d(3, 64, kernel_size=5, padding=1)
+#         self.e12 = nn.Conv2d(64, 128, kernel_size=5, padding=1)
+#         self.upconv1 = nn.ConvTranspose2d(128, 64, kernel_size=6)
+#         self.outconv = nn.Conv2d(64, n_class, kernel_size=2)
+
+#     def forward(self, x):
+#         xe11 = relu(self.e11(x))
+#         xe12 = relu(self.e12(xe11))
+#         xu1 = self.upconv1(xe12)
+#         out = F.avg_pool2d(self.outconv(xu1),(46,46),46) #, divisor_override=1)
+
+#         return out
+# %% prototyping
+
+## encoder
+
+# e11 = nn.Conv2d(3, 64, kernel_size=5, padding=1).to(device) # torch.Size([10, 64, 366, 366])
+# xe11 = relu(e11(xb))
+
+# e12 = nn.Conv2d(64, 64, kernel_size=5, padding=1).to(device) # torch.Size([10, 64, 364, 364])
+# xe12 = relu(e12(xe11))
+
+# pool1 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) # torch.Size([10, 64, 182, 182])
+# xp1 = pool1(xe12)
+
+# e21 = nn.Conv2d(64, 128, kernel_size=5, padding=1).to(device) # torch.Size([10, 128, 180, 180])
+# xe21 = relu(e21(xp1))
+
+# e22 = nn.Conv2d(128, 128, kernel_size=5, padding=1).to(device) # torch.Size([10, 128, 178, 178])
+# xe22 = relu(e22(xe21))
+
+# pool2 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) # torch.Size([10, 128, 89, 89])
+# xp2 = pool2(xe22)
+
+# e31 = nn.Conv2d(128, 256, kernel_size=5, padding=1).to(device) # torch.Size([10, 256, 87, 87])
+# xe31 = relu(e31(xp2))
+
+# e32 = nn.Conv2d(256, 256, kernel_size=5, padding=1).to(device) # torch.Size([10, 256, 85, 85])
+# xe32 = relu(e32(xe31))
+
+# pool3 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) # torch.Size([10, 256, 42, 42])
+# xp3 = pool3(xe32)
+
+# e41 = nn.Conv2d(256, 512, kernel_size=5, padding=1).to(device) # torch.Size([10, 512, 40, 40])
+# xe41 = relu(e41(xp3)) 
+
+# e42 = nn.Conv2d(512, 512, kernel_size=5, padding=1).to(device) # torch.Size([10, 512, 38, 38])
+# xe42 = relu(e42(xe41))
+
+# pool4 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) # torch.Size([10, 512, 19, 19])
+# xp4 = pool4(xe42)
+
+# e51 = nn.Conv2d(512, 1024, kernel_size=5, padding=1).to(device) # torch.Size([10, 1024, 17, 17])
+# xe51 = relu(e51(xp4))
+
+# e52 = nn.Conv2d(1024, 1024, kernel_size=5, padding=1).to(device) # torch.Size([10, 1024, 15, 15])
+# xe52 = relu(e52(xe51))
+
+# ## decoder
+# upconv1 = nn.ConvTranspose2d(1024, 512, kernel_size=10, stride=2).to(device) # torch.Size([10, 512, 38, 38])
+# xu1 = upconv1(xe52)
+
+# xu11 = torch.cat([xu1, xe42], dim=1) # torch.Size([10, 1024, 38, 38])
+
+# d11 = nn.Conv2d(1024, 512, kernel_size=5, padding=1).to(device) # torch.Size([10, 512, 36, 36])
+# xd11 = relu(d11(xu11))
+
+# d12 = nn.Conv2d(512, 512, kernel_size=5, padding=1).to(device) # torch.Size([10, 512, 34, 34])
+# xd12 = relu(d12(xd11))
+
+# upconv2 = nn.ConvTranspose2d(512, 256, kernel_size=19, stride=2).to(device) # torch.Size([10, 256, 85, 85])
+# xu2 = upconv2(xd12)
+
+# xu22 = torch.cat([xu2, xe32], dim=1) # torch.Size([10, 512, 85, 85])
+
+# d21 = nn.Conv2d(512, 256, kernel_size=5, padding=1).to(device) # torch.Size([10, 256, 83, 83])
+# xd21 = relu(d21(xu22))
+
+# d22 = nn.Conv2d(256, 256, kernel_size=5, padding=1).to(device) # torch.Size([10, 256, 81, 81])
+# xd22 = relu(d22(xd21))
+
+# upconv3 = nn.ConvTranspose2d(256, 128, kernel_size=18, stride=2).to(device) # torch.Size([10, 128, 178, 178])
+# xu3 = upconv3(xd22)
+
+# xu33 = torch.cat([xu3, xe22], dim=1) # torch.Size([10, 256, 178, 178])
+
+# d31 = nn.Conv2d(256, 128, kernel_size=5, padding=1).to(device) # torch.Size([10, 128, 176, 176])
+# xd31 = relu(d31(xu33))
+
+# d32 = nn.Conv2d(128, 128, kernel_size=5, padding=1).to(device) # torch.Size([10, 128, 174, 174])
+# xd32 = relu(d32(xd31))
+
+# upconv4 = nn.ConvTranspose2d(128, 64, kernel_size=18, stride=2).to(device)  # torch.Size([10, 64, 364, 364])
+# xu4 = upconv4(xd32)
+
+# xu44 = torch.cat([xu4, xe12], dim=1) # torch.Size([10, 128, 364, 364])
+
+
+# d41 = nn.Conv2d(128, 64, kernel_size=3, padding=1).to(device) 
+# xd41 = relu(d41(xu44))
+
+# d42 = nn.Conv2d(64, 64, kernel_size=3, padding=1).to(device) 
+# xd42 = relu(d42(xd41))
+
+# outconv = nn.Conv2d(64, len(labels['AFG']), kernel_size=7, padding=5).to(device) 
+# out = outconv(xd42)
+# print(out.shape)
+# %%
 class UNet(nn.Module):
     def __init__(self, n_class):
         super().__init__()
-        self.e11 = nn.Conv2d(3, 64, kernel_size=5, padding=1)
-        self.e12 = nn.Conv2d(64, 128, kernel_size=5, padding=1)
-        self.upconv1 = nn.ConvTranspose2d(128, 64, kernel_size=6)
-        self.outconv = nn.Conv2d(64, n_class, kernel_size=2)
+        # Encoder
+        self.e11 = nn.Conv2d(3, 64, kernel_size=5, padding=1) 
+        self.e12 = nn.Conv2d(64, 64, kernel_size=5, padding=1) 
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2) 
+
+        self.e21 = nn.Conv2d(64, 128, kernel_size=5, padding=1) 
+        self.e22 = nn.Conv2d(128, 128, kernel_size=5, padding=1) 
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2) 
+
+        self.e31 = nn.Conv2d(128, 256, kernel_size=5, padding=1) 
+        self.e32 = nn.Conv2d(256, 256, kernel_size=5, padding=1) 
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2) 
+
+        self.e41 = nn.Conv2d(256, 512, kernel_size=5, padding=1) 
+        self.e42 = nn.Conv2d(512, 512, kernel_size=5, padding=1) 
+        self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2) 
+
+        self.e51 = nn.Conv2d(512, 1024, kernel_size=5, padding=1) 
+        self.e52 = nn.Conv2d(1024, 1024, kernel_size=5, padding=1) 
+
+        # Decoder
+        self.upconv1 = nn.ConvTranspose2d(1024, 512, kernel_size=10, stride=2)
+        self.d11 = nn.Conv2d(1024, 512, kernel_size=5, padding=1)
+        self.d12 = nn.Conv2d(512, 512, kernel_size=5, padding=1)
+
+        self.upconv2 = nn.ConvTranspose2d(512, 256, kernel_size=19, stride=2)
+        self.d21 = nn.Conv2d(512, 256, kernel_size=5, padding=1)
+        self.d22 = nn.Conv2d(256, 256, kernel_size=5, padding=1)
+
+        self.upconv3 = nn.ConvTranspose2d(256, 128, kernel_size=18, stride=2)
+        self.d31 = nn.Conv2d(256, 128, kernel_size=5, padding=1)
+        self.d32 = nn.Conv2d(128, 128, kernel_size=5, padding=1)
+
+        self.upconv4 = nn.ConvTranspose2d(128, 64, kernel_size=18, stride=2)
+        self.d41 = nn.Conv2d(128, 64, kernel_size=3, padding=1)
+        self.d42 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
+
+        # Output layer
+        self.outconv = nn.Conv2d(64, n_class, kernel_size=7, padding=5)
 
     def forward(self, x):
+        # Encoder
         xe11 = relu(self.e11(x))
         xe12 = relu(self.e12(xe11))
-        xu1 = self.upconv1(xe12)
-        out = F.avg_pool2d(self.outconv(xu1),(46,46),46) #, divisor_override=1)
+        xp1 = self.pool1(xe12)
+
+        xe21 = relu(self.e21(xp1))
+        xe22 = relu(self.e22(xe21))
+        xp2 = self.pool2(xe22)
+
+        xe31 = relu(self.e31(xp2))
+        xe32 = relu(self.e32(xe31))
+        xp3 = self.pool3(xe32)
+
+        xe41 = relu(self.e41(xp3))
+        xe42 = relu(self.e42(xe41))
+        xp4 = self.pool4(xe42)
+
+        xe51 = relu(self.e51(xp4))
+        xe52 = relu(self.e52(xe51))
+        
+        # Decoder
+        xu1 = self.upconv1(xe52)
+        xu11 = torch.cat([xu1, xe42], dim=1)
+        xd11 = relu(self.d11(xu11))
+        xd12 = relu(self.d12(xd11))
+
+        xu2 = self.upconv2(xd12)
+        xu22 = torch.cat([xu2, xe32], dim=1)
+        xd21 = relu(self.d21(xu22))
+        xd22 = relu(self.d22(xd21))
+
+        xu3 = self.upconv3(xd22)
+        xu33 = torch.cat([xu3, xe22], dim=1)
+        xd31 = relu(self.d31(xu33))
+        xd32 = relu(self.d32(xd31))
+
+        xu4 = self.upconv4(xd32)
+        xu44 = torch.cat([xu4, xe12], dim=1)
+        xd41 = relu(self.d41(xu44))
+        xd42 = relu(self.d42(xd41))
+
+        # Output layer
+        out = F.avg_pool2d(self.outconv(xd42),(46,46),46) #, divisor_override=1)
 
         return out
+
 # %%
 model = UNet(n_class=len(labels['AFG'])).to(device)
 print(model)
@@ -157,6 +343,7 @@ iterator = iter(train_dl)
 for batch_idx in range(len(train_dl)):
     data_batch = next(iterator)
     xb = data_batch['obsvariable'].type(torch.float).to(device)
+    print(xb.shape)
     yb = data_batch['groundtruth'].type(torch.float).to(device)
     out = model(xb)
     loss = loss_func(out, yb)
@@ -230,7 +417,7 @@ _model.load_state_dict(weights)
 _model.eval()
 _model.to(device)
 # %%
-n = 21
+n = 10
 x = train_ds[n]['obsvariable'].unsqueeze(0).type(torch.float).to(device)
 print(x.shape)
 y = train_ds[n]['groundtruth'].to(device)
