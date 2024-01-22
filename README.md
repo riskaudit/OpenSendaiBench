@@ -1,2 +1,2 @@
 # OpenSendaiBench
-OpenSendaiBench: A benchmark dataset for building exposure and vulnerability dynamics
+OpenSendaiBench: A Benchmark Dataset of Building Exposure and Vulnerability Dynamics for EO-based Auditing of Global Disaster Risk
