@@ -55,7 +55,7 @@ mu_exp = np.exp(mu)
 sigma_exp = np.exp(sigma)
 
 fitting_params_lognormal = scipy.stats.lognorm.fit(x_exp, 
-                                                   floc=0, #floc=0 points the optimizer to a pretty good place to start, but then tells it to stay there.
+                                                   floc=0, 
                                                    scale=mu_exp)
 lognorm_dist_fitted = scipy.stats.lognorm(*fitting_params_lognormal)
 t = np.linspace(np.min(x_exp), np.max(x_exp), 100)
@@ -176,97 +176,35 @@ print(train_ds[1]['obsvariable'].shape)
 train_dl = DataLoader(train_ds, batch_size=10, shuffle=True)
 len(train_dl)
 train_dl.dataset[1]['groundtruth'].shape
-#         return out
 # %% prototyping
-
-## encoder
-# k = 13
-# e11 = nn.Conv2d(14, 12, kernel_size=k, padding=1).to(device) 
-# xe11 = relu(e11(xb))
-# print(xe11.shape)
-
-# e12 = nn.Conv2d(12, 10, kernel_size=k, padding=1).to(device)
-# xe12 = relu(e12(xe11))
-# print(xe12.shape)
-
-# pool1 = nn.MaxPool2d(kernel_size=3, stride=2).to(device) 
-# xp1 = pool1(xe12)
-# print(xp1.shape)
-
-# e21 = nn.Conv2d(10, 8, kernel_size=k, padding=1).to(device) 
-# xe21 = relu(e21(xp1))
-# print(xe21.shape)
-
-# e22 = nn.Conv2d(8, 6, kernel_size=k, padding=1).to(device) 
-# xe22 = relu(e22(xe21))
-# print(xe22.shape)
-
-# pool2 = nn.MaxPool2d(kernel_size=3, stride=2).to(device) 
-# xp2 = pool2(xe22)
-# print(xp2.shape)
-
-# e31 = nn.Conv2d(6, 4, kernel_size=k, padding=1).to(device) 
-# xe31 = relu(e31(xp2))
-# print(xe31.shape)
-
-# e32 = nn.Conv2d(4, 2, kernel_size=k, padding=1).to(device) 
-# xe32 = relu(e32(xe31))
-# print(xe32.shape)
-
-# pool3 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) 
-# xp3 = pool3(xe32)
-# print(xp3.shape)
-
-# e41 = nn.Conv2d(2, 1, kernel_size=k, padding=1).to(device) 
-# xe41 = relu(e41(xp3)) 
-# print(xe41.shape)
-
-# e42 = nn.Conv2d(1, 1, kernel_size=k, padding=1).to(device) 
-# xe42 = relu(e42(xe41))
-# print(xe42.shape)
-
+iterator = iter(train_dl)
+model = models.resnet50(weights='ResNet50_Weights.DEFAULT').to(device)
+model.conv1 = nn.Conv2d(14,64,
+                        kernel_size = (7,7),
+                        stride = (2,2), 
+                        padding = (3,3), bias = False).to(device)
+model.avgpool = nn.AdaptiveAvgPool3d(output_size=(1, 8, 8)).to(device)
+model.fc = nn.Identity().to(device)
+summary(model.to(device), 
+        input_data=(14, 368, 368), 
+        batch_dim = 0, 
+        col_names = ('input_size', 'output_size', 'num_params'),
+        verbose = 0)
 # %%
-class UNet(nn.Module):
-    def __init__(self, n_class):
-        super().__init__()
-        # Encoder
-        self.e11 = nn.Conv2d(14, 12, kernel_size=13, padding=1) 
-        self.e12 = nn.Conv2d(12, 10, kernel_size=13, padding=1) 
-        self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2) 
-
-        self.e21 = nn.Conv2d(10, 8, kernel_size=13, padding=1) 
-        self.e22 = nn.Conv2d(8, 6, kernel_size=13, padding=1) 
-        self.pool2 = nn.MaxPool2d(kernel_size=3, stride=2) 
-
-        self.e31 = nn.Conv2d(6, 4, kernel_size=13, padding=1) 
-        self.e32 = nn.Conv2d(4, 2, kernel_size=13, padding=1) 
-        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2) 
-
-        self.e41 = nn.Conv2d(2, 1, kernel_size=13, padding=1) 
-        self.e42 = nn.Conv2d(1, 1, kernel_size=13, padding=1) 
-
-
-    def forward(self, x):
-        # Encoder
-        xe11 = relu(self.e11(x))
-        xe12 = relu(self.e12(xe11))
-        xp1 = self.pool1(xe12)
-
-        xe21 = relu(self.e21(xp1))
-        xe22 = relu(self.e22(xe21))
-        xp2 = self.pool2(xe22)
-
-        xe31 = relu(self.e31(xp2))
-        xe32 = relu(self.e32(xe31))
-        xp3 = self.pool3(xe32)
-
-        xe41 = relu(self.e41(xp3))
-        out = relu(self.e42(xe41))
-
-        return out
-
+model.to(device)
+model.eval()
+model.training = False
+for batch_idx in range(0,1):
+    data_batch = next(iterator)
+    xb = data_batch['obsvariable'].type(torch.float).to(device)
+    print(xb.shape)
+    yb = data_batch['groundtruth'].type(torch.float).to(device)
+    out = (torch.sigmoid(model(xb.to(device)))-0.5)/0.5
+    print(out.shape)
+    print(out)
+    break
 # %%
-model = UNet(n_class=len(labels['AFG'])).to(device)
+
 print(model)
 # %%
 summary(model, input_size=(14, 368, 368))
@@ -279,7 +217,8 @@ for batch_idx in range(len(train_dl)):
     xb = data_batch['obsvariable'].type(torch.float).to(device)
     print(xb.shape)
     yb = data_batch['groundtruth'].type(torch.float).to(device)
-    out = model(xb)
+    out = torch.reshape(torch.sigmoid(model(xb)), (10,1,8,8))
+    print(out.shape)
     loss = loss_func(out, yb)
     print(loss)
     print(loss.item())
@@ -319,7 +258,8 @@ def loss_epoch(model,loss_func,dataset_dl,opt=None):
         data_batch = next(iterator)
         xb = data_batch['obsvariable'].type(torch.float).to(device)
         yb = data_batch['groundtruth'].type(torch.float).to(device)
-        yb_h = model(xb)
+        yb_h = (torch.reshape(torch.sigmoid(model(xb)),
+                              (10,1,8,8)).to(device)-0.5)/0.5
         loss_b,metric_b=loss_batch(loss_func, xb, yb,yb_h, opt)
         loss+=loss_b
         if metric_b is not None:
@@ -335,8 +275,9 @@ def train_val(epochs, model, loss_func, opt, train_dl, val_dl):
         with torch.no_grad():
             val_loss, val_metric=loss_epoch(model,loss_func,val_dl)
         accuracy=val_metric #100*val_metric
-        print("epoch: %d, train loss: %.6f, val loss: %.6f, rmse: %.2f" %(epoch, train_loss,val_loss,accuracy))
+        print("epoch: %d, train loss: %.6f, val loss: %.6f, rmse: %.6f" %(epoch, train_loss,val_loss,accuracy))
 # %%
+model.train()
 num_epochs=25
 train_val(num_epochs, model, loss_func, opt, train_dl, val_dl=train_dl)
 # %%
@@ -345,31 +286,39 @@ path2weights=str("./models/weights_"
                  +"_epoch_"+str(num_epochs)+".pt")
 torch.save(model.state_dict(), path2weights)
 # %%
-_model = UNet(n_class=len(labels['AFG']))
+_model = model #UNet(n_class=len(labels['AFG']))
 weights=torch.load(path2weights)
 _model.load_state_dict(weights)
 _model.eval()
 _model.to(device)
 # %%
-n = 20
-x = train_ds[n]['obsvariable'].unsqueeze(0).type(torch.float).to(device)
-print(x.shape)
-y = train_ds[n]['groundtruth'].to(device)
-output=_model(x)
-print(output.shape)
-# fig, ((ax1,ax2,ax3,ax4,ax5),
-#       (ax6,ax7,ax8,ax9,ax10)) = plt.subplots(nrows=2, ncols=5)
-# ax1.imshow(output[0,0,:,:].cpu().detach().numpy())
-# ax2.imshow(output[0,1,:,:].cpu().detach().numpy())
-# ax3.imshow(output[0,2,:,:].cpu().detach().numpy())
-# ax4.imshow(output[0,3,:,:].cpu().detach().numpy())
-# ax5.imshow(output[0,4,:,:].cpu().detach().numpy())
-# ax6.imshow(y[0,:,:].cpu().detach().numpy())
-# ax7.imshow(y[1,:,:].cpu().detach().numpy())
-# ax8.imshow(y[2,:,:].cpu().detach().numpy())
-# ax9.imshow(y[3,:,:].cpu().detach().numpy())
-# ax10.imshow(y[4,:,:].cpu().detach().numpy())
-fig, (ax1, ax6) = plt.subplots(nrows=1, ncols=2)
-ax1.imshow(output[0,0,:,:].cpu().detach().numpy())
-ax6.imshow(lognorm_dist.cdf(y[0,:,:].cpu().detach().numpy()))
+lognorm_dist = scipy.stats.lognorm(s=sigma, loc=0, scale=np.exp(mu))
+lognorm_dist.ppf
 # %%
+batch = next(iter(train_dl))
+
+xb = batch['obsvariable'].type(torch.float).to(device)
+yb = batch['groundtruth'].type(torch.float).to(device)
+yb_h = (torch.reshape(torch.sigmoid(_model(xb)), (10,1,8,8)).to(device)-0.5)/0.5
+
+###
+fig, axs = plt.subplots(nrows=1,ncols=2,layout='compressed')
+f = axs[0].imshow(yb[0,0,:,:].cpu().detach().numpy(),
+                  cmap='viridis', vmin=0, vmax=1)
+axs[0].set_title('Groundtruth, cdf')
+f = axs[1].imshow(yb_h[0,0,:,:].cpu().detach().numpy(),
+                  cmap='viridis', vmin=0, vmax=1)
+axs[1].set_title('Estimated, cdf')
+cbar = fig.colorbar(f, shrink=0.95)
+
+###
+max_value = max(lognorm_dist.ppf(yb[0,0,:,:].cpu().detach().numpy()).max(),
+                lognorm_dist.ppf(yb_h[0,0,:,:].cpu().detach().numpy()).max())
+fig1, axs1 = plt.subplots(nrows=1,ncols=2,layout='compressed')
+f1 = axs1[0].imshow(lognorm_dist.ppf(yb[0,0,:,:].cpu().detach().numpy()),
+                  cmap='viridis', vmin=0, vmax=max_value)
+axs1[0].set_title('Groundtruth, nbldg')
+f1 = axs1[1].imshow(lognorm_dist.ppf(yb_h[0,0,:,:].cpu().detach().numpy()),
+                  cmap='viridis', vmin=0, vmax=max_value)
+axs1[1].set_title('Estimated, nbldg')
+axs1 = fig.colorbar(f1, shrink=0.95)
