@@ -5,6 +5,7 @@ import os
 import cv2
 import glob
 import matplotlib.pyplot as plt
+import seaborn as sns
 from skimage import io
 import rioxarray as rxr
 import copy
@@ -12,6 +13,8 @@ import time
 from datetime import datetime
 from collections import defaultdict
 import numpy as np
+import scipy
+from scipy import stats
 from PIL import Image 
 
 import torch
@@ -34,12 +37,53 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 # %%
 device = torch.device("mps")
 # %%
+country = 'AFG'
+file_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/'+str(country)+'_oed_exposure_20200811/'
+nbldg_file = file_path+'attr_rasterized/'+str(country)+'_nbldg_'+str(labels[country][0])+'.tif'
+mask_file = file_path+str(country)+"_country.tif"
+nb = cv2.imread(nbldg_file, cv2.IMREAD_UNCHANGED)
+mask = cv2.imread(mask_file, cv2.IMREAD_UNCHANGED)
+nb_masked = nb.flatten()[mask.flatten()>0]
+nb_masked = nb_masked[nb_masked != 0]
+nb_masked.shape
+sns.histplot(data=nb_masked, stat='percent')
+# %%
+x_exp = nb_masked
+mu = np.mean(np.log(nb_masked)) #mle estimate - mean of the log of distribution
+sigma = np.std(np.log(nb_masked)) # mle estimate - stddev of the log of distrib
+mu_exp = np.exp(mu) 
+sigma_exp = np.exp(sigma)
+
+fitting_params_lognormal = scipy.stats.lognorm.fit(x_exp, 
+                                                   floc=0, #floc=0 points the optimizer to a pretty good place to start, but then tells it to stay there.
+                                                   scale=mu_exp)
+lognorm_dist_fitted = scipy.stats.lognorm(*fitting_params_lognormal)
+t = np.linspace(np.min(x_exp), np.max(x_exp), 100)
+
+lognorm_dist = scipy.stats.lognorm(s=sigma, loc=0, scale=np.exp(mu))
+
+# Plot lognormals
+f, ax = plt.subplots(1, sharex='col', figsize=(10, 5))
+sns.distplot(x_exp, ax=ax, norm_hist=True, kde=False,
+             label='Data exp(X)~N(mu={0:.1f}, sigma={1:.1f})\n X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(mu, sigma))
+ax.plot(t, lognorm_dist_fitted.pdf(t), lw=2, color='r',
+        label='Fitted Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist_fitted.mean(), lognorm_dist_fitted.std()))
+ax.plot(t, lognorm_dist.pdf(t), lw=2, color='g', ls=':',
+        label='Original Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist.mean(), lognorm_dist.std()))
+# ax.plot(t, lognorm_dist.cdf(t), lw=2, color='b',label='CDF')
+ax.title.set_text(str(str(country)+' - lognormCDF or non-exceedance'))
+ax.legend(loc='lower right')
+plt.show()
+f.savefig('./lognorm/'+str(country)+'.png')
+plt.close()
+ 
+# %%
 class OpenSendaiBenchDataset(Dataset):
     """
     An implementation of a PyTorch dataset for loading pairs of observable variables and ground truth labels.
     Inspired by https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
     """
-    def __init__(self, obsvariables_path: str, groundtruth_path: str, country: str, signals: list, transform: transforms = None):
+    def __init__(self, sigma: float, mu: float, obsvariables_path: str, groundtruth_path: str, country: str, signals: list, transform: transforms = None):
         """
         Constructs an OpenSendaiBenchDataset.
         :param obsvariables_path: Path to the source folder of observable variables
@@ -51,6 +95,8 @@ class OpenSendaiBenchDataset(Dataset):
         self.country = country
         self.signals = signals
         self.transform = transform
+        self.lognorm_dist = scipy.stats.lognorm(s=sigma, 
+                                                loc=0, scale=np.exp(mu))
 
     def __len__(self):
         """
@@ -83,7 +129,7 @@ class OpenSendaiBenchDataset(Dataset):
                                       self.country+'*/tiles/images/'+
                                       self.country+'_nbldg_'+labels[self.country][w]+'_'+str(i)+'_'+'of_'+'*.tif')):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
-                groundtruth[w,:,:] = a.reshape(1,a.shape[0],a.shape[1])
+                groundtruth[w,:,:] = self.lognorm_dist.cdf(a.reshape(1,a.shape[0],a.shape[1]))
 
         obsvariable = torch.from_numpy(obsvariable).float() #.unsqueeze(0)
         # obsvariable_8x8 = torch.from_numpy(obsvariable_8x8).float()
@@ -118,171 +164,87 @@ class OpenSendaiBenchDataset(Dataset):
             axs2[w].set_yticks([])
         plt.tight_layout()
 # %%
-train_ds = OpenSendaiBenchDataset( obsvariables_path="/obsvariables/", 
+train_ds = OpenSendaiBenchDataset(      obsvariables_path="/obsvariables/", 
                                         groundtruth_path="/groundtruth/", 
                                         country='AFG', 
-                                        signals = ['blue','green','red'])
-                                        # signals = ['VH','VV','aerosol','blue','green','red','red1','red2','red3','nir','red4','vapor','swir1','swir2'])
+                                        # signals = ['blue','green','red'])
+                                        signals = ['VH','VV','aerosol','blue','green','red','red1','red2','red3','nir','red4','vapor','swir1','swir2'],
+                                        sigma=sigma, mu=mu)
 print(train_ds[1]['groundtruth'].shape)
 print(train_ds[1]['obsvariable'].shape)
 # %%
 train_dl = DataLoader(train_ds, batch_size=10, shuffle=True)
 len(train_dl)
 train_dl.dataset[1]['groundtruth'].shape
-# %%
-# class UNet(nn.Module):
-#     def __init__(self, n_class):
-#         super().__init__()
-#         self.e11 = nn.Conv2d(3, 64, kernel_size=5, padding=1)
-#         self.e12 = nn.Conv2d(64, 128, kernel_size=5, padding=1)
-#         self.upconv1 = nn.ConvTranspose2d(128, 64, kernel_size=6)
-#         self.outconv = nn.Conv2d(64, n_class, kernel_size=2)
-
-#     def forward(self, x):
-#         xe11 = relu(self.e11(x))
-#         xe12 = relu(self.e12(xe11))
-#         xu1 = self.upconv1(xe12)
-#         out = F.avg_pool2d(self.outconv(xu1),(46,46),46) #, divisor_override=1)
-
 #         return out
 # %% prototyping
 
 ## encoder
-
-# e11 = nn.Conv2d(3, 64, kernel_size=5, padding=1).to(device) # torch.Size([10, 64, 366, 366])
+# k = 13
+# e11 = nn.Conv2d(14, 12, kernel_size=k, padding=1).to(device) 
 # xe11 = relu(e11(xb))
+# print(xe11.shape)
 
-# e12 = nn.Conv2d(64, 64, kernel_size=5, padding=1).to(device) # torch.Size([10, 64, 364, 364])
+# e12 = nn.Conv2d(12, 10, kernel_size=k, padding=1).to(device)
 # xe12 = relu(e12(xe11))
+# print(xe12.shape)
 
-# pool1 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) # torch.Size([10, 64, 182, 182])
+# pool1 = nn.MaxPool2d(kernel_size=3, stride=2).to(device) 
 # xp1 = pool1(xe12)
+# print(xp1.shape)
 
-# e21 = nn.Conv2d(64, 128, kernel_size=5, padding=1).to(device) # torch.Size([10, 128, 180, 180])
+# e21 = nn.Conv2d(10, 8, kernel_size=k, padding=1).to(device) 
 # xe21 = relu(e21(xp1))
+# print(xe21.shape)
 
-# e22 = nn.Conv2d(128, 128, kernel_size=5, padding=1).to(device) # torch.Size([10, 128, 178, 178])
+# e22 = nn.Conv2d(8, 6, kernel_size=k, padding=1).to(device) 
 # xe22 = relu(e22(xe21))
+# print(xe22.shape)
 
-# pool2 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) # torch.Size([10, 128, 89, 89])
+# pool2 = nn.MaxPool2d(kernel_size=3, stride=2).to(device) 
 # xp2 = pool2(xe22)
+# print(xp2.shape)
 
-# e31 = nn.Conv2d(128, 256, kernel_size=5, padding=1).to(device) # torch.Size([10, 256, 87, 87])
+# e31 = nn.Conv2d(6, 4, kernel_size=k, padding=1).to(device) 
 # xe31 = relu(e31(xp2))
+# print(xe31.shape)
 
-# e32 = nn.Conv2d(256, 256, kernel_size=5, padding=1).to(device) # torch.Size([10, 256, 85, 85])
+# e32 = nn.Conv2d(4, 2, kernel_size=k, padding=1).to(device) 
 # xe32 = relu(e32(xe31))
+# print(xe32.shape)
 
-# pool3 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) # torch.Size([10, 256, 42, 42])
+# pool3 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) 
 # xp3 = pool3(xe32)
+# print(xp3.shape)
 
-# e41 = nn.Conv2d(256, 512, kernel_size=5, padding=1).to(device) # torch.Size([10, 512, 40, 40])
+# e41 = nn.Conv2d(2, 1, kernel_size=k, padding=1).to(device) 
 # xe41 = relu(e41(xp3)) 
+# print(xe41.shape)
 
-# e42 = nn.Conv2d(512, 512, kernel_size=5, padding=1).to(device) # torch.Size([10, 512, 38, 38])
+# e42 = nn.Conv2d(1, 1, kernel_size=k, padding=1).to(device) 
 # xe42 = relu(e42(xe41))
+# print(xe42.shape)
 
-# pool4 = nn.MaxPool2d(kernel_size=2, stride=2).to(device) # torch.Size([10, 512, 19, 19])
-# xp4 = pool4(xe42)
-
-# e51 = nn.Conv2d(512, 1024, kernel_size=5, padding=1).to(device) # torch.Size([10, 1024, 17, 17])
-# xe51 = relu(e51(xp4))
-
-# e52 = nn.Conv2d(1024, 1024, kernel_size=5, padding=1).to(device) # torch.Size([10, 1024, 15, 15])
-# xe52 = relu(e52(xe51))
-
-# ## decoder
-# upconv1 = nn.ConvTranspose2d(1024, 512, kernel_size=10, stride=2).to(device) # torch.Size([10, 512, 38, 38])
-# xu1 = upconv1(xe52)
-
-# xu11 = torch.cat([xu1, xe42], dim=1) # torch.Size([10, 1024, 38, 38])
-
-# d11 = nn.Conv2d(1024, 512, kernel_size=5, padding=1).to(device) # torch.Size([10, 512, 36, 36])
-# xd11 = relu(d11(xu11))
-
-# d12 = nn.Conv2d(512, 512, kernel_size=5, padding=1).to(device) # torch.Size([10, 512, 34, 34])
-# xd12 = relu(d12(xd11))
-
-# upconv2 = nn.ConvTranspose2d(512, 256, kernel_size=19, stride=2).to(device) # torch.Size([10, 256, 85, 85])
-# xu2 = upconv2(xd12)
-
-# xu22 = torch.cat([xu2, xe32], dim=1) # torch.Size([10, 512, 85, 85])
-
-# d21 = nn.Conv2d(512, 256, kernel_size=5, padding=1).to(device) # torch.Size([10, 256, 83, 83])
-# xd21 = relu(d21(xu22))
-
-# d22 = nn.Conv2d(256, 256, kernel_size=5, padding=1).to(device) # torch.Size([10, 256, 81, 81])
-# xd22 = relu(d22(xd21))
-
-# upconv3 = nn.ConvTranspose2d(256, 128, kernel_size=18, stride=2).to(device) # torch.Size([10, 128, 178, 178])
-# xu3 = upconv3(xd22)
-
-# xu33 = torch.cat([xu3, xe22], dim=1) # torch.Size([10, 256, 178, 178])
-
-# d31 = nn.Conv2d(256, 128, kernel_size=5, padding=1).to(device) # torch.Size([10, 128, 176, 176])
-# xd31 = relu(d31(xu33))
-
-# d32 = nn.Conv2d(128, 128, kernel_size=5, padding=1).to(device) # torch.Size([10, 128, 174, 174])
-# xd32 = relu(d32(xd31))
-
-# upconv4 = nn.ConvTranspose2d(128, 64, kernel_size=18, stride=2).to(device)  # torch.Size([10, 64, 364, 364])
-# xu4 = upconv4(xd32)
-
-# xu44 = torch.cat([xu4, xe12], dim=1) # torch.Size([10, 128, 364, 364])
-
-
-# d41 = nn.Conv2d(128, 64, kernel_size=3, padding=1).to(device) 
-# xd41 = relu(d41(xu44))
-
-# d42 = nn.Conv2d(64, 64, kernel_size=3, padding=1).to(device) 
-# xd42 = relu(d42(xd41))
-
-# outconv = nn.Conv2d(64, len(labels['AFG']), kernel_size=7, padding=5).to(device) 
-# out = outconv(xd42)
-# print(out.shape)
 # %%
 class UNet(nn.Module):
     def __init__(self, n_class):
         super().__init__()
         # Encoder
-        self.e11 = nn.Conv2d(3, 64, kernel_size=5, padding=1) 
-        self.e12 = nn.Conv2d(64, 64, kernel_size=5, padding=1) 
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2) 
+        self.e11 = nn.Conv2d(14, 12, kernel_size=13, padding=1) 
+        self.e12 = nn.Conv2d(12, 10, kernel_size=13, padding=1) 
+        self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2) 
 
-        self.e21 = nn.Conv2d(64, 128, kernel_size=5, padding=1) 
-        self.e22 = nn.Conv2d(128, 128, kernel_size=5, padding=1) 
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2) 
+        self.e21 = nn.Conv2d(10, 8, kernel_size=13, padding=1) 
+        self.e22 = nn.Conv2d(8, 6, kernel_size=13, padding=1) 
+        self.pool2 = nn.MaxPool2d(kernel_size=3, stride=2) 
 
-        self.e31 = nn.Conv2d(128, 256, kernel_size=5, padding=1) 
-        self.e32 = nn.Conv2d(256, 256, kernel_size=5, padding=1) 
+        self.e31 = nn.Conv2d(6, 4, kernel_size=13, padding=1) 
+        self.e32 = nn.Conv2d(4, 2, kernel_size=13, padding=1) 
         self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2) 
 
-        self.e41 = nn.Conv2d(256, 512, kernel_size=5, padding=1) 
-        self.e42 = nn.Conv2d(512, 512, kernel_size=5, padding=1) 
-        self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2) 
+        self.e41 = nn.Conv2d(2, 1, kernel_size=13, padding=1) 
+        self.e42 = nn.Conv2d(1, 1, kernel_size=13, padding=1) 
 
-        self.e51 = nn.Conv2d(512, 1024, kernel_size=5, padding=1) 
-        self.e52 = nn.Conv2d(1024, 1024, kernel_size=5, padding=1) 
-
-        # Decoder
-        self.upconv1 = nn.ConvTranspose2d(1024, 512, kernel_size=10, stride=2)
-        self.d11 = nn.Conv2d(1024, 512, kernel_size=5, padding=1)
-        self.d12 = nn.Conv2d(512, 512, kernel_size=5, padding=1)
-
-        self.upconv2 = nn.ConvTranspose2d(512, 256, kernel_size=19, stride=2)
-        self.d21 = nn.Conv2d(512, 256, kernel_size=5, padding=1)
-        self.d22 = nn.Conv2d(256, 256, kernel_size=5, padding=1)
-
-        self.upconv3 = nn.ConvTranspose2d(256, 128, kernel_size=18, stride=2)
-        self.d31 = nn.Conv2d(256, 128, kernel_size=5, padding=1)
-        self.d32 = nn.Conv2d(128, 128, kernel_size=5, padding=1)
-
-        self.upconv4 = nn.ConvTranspose2d(128, 64, kernel_size=18, stride=2)
-        self.d41 = nn.Conv2d(128, 64, kernel_size=3, padding=1)
-        self.d42 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
-
-        # Output layer
-        self.outconv = nn.Conv2d(64, n_class, kernel_size=7, padding=5)
 
     def forward(self, x):
         # Encoder
@@ -299,35 +261,7 @@ class UNet(nn.Module):
         xp3 = self.pool3(xe32)
 
         xe41 = relu(self.e41(xp3))
-        xe42 = relu(self.e42(xe41))
-        xp4 = self.pool4(xe42)
-
-        xe51 = relu(self.e51(xp4))
-        xe52 = relu(self.e52(xe51))
-        
-        # Decoder
-        xu1 = self.upconv1(xe52)
-        xu11 = torch.cat([xu1, xe42], dim=1)
-        xd11 = relu(self.d11(xu11))
-        xd12 = relu(self.d12(xd11))
-
-        xu2 = self.upconv2(xd12)
-        xu22 = torch.cat([xu2, xe32], dim=1)
-        xd21 = relu(self.d21(xu22))
-        xd22 = relu(self.d22(xd21))
-
-        xu3 = self.upconv3(xd22)
-        xu33 = torch.cat([xu3, xe22], dim=1)
-        xd31 = relu(self.d31(xu33))
-        xd32 = relu(self.d32(xd31))
-
-        xu4 = self.upconv4(xd32)
-        xu44 = torch.cat([xu4, xe12], dim=1)
-        xd41 = relu(self.d41(xu44))
-        xd42 = relu(self.d42(xd41))
-
-        # Output layer
-        out = F.avg_pool2d(self.outconv(xd42),(46,46),46) #, divisor_override=1)
+        out = relu(self.e42(xe41))
 
         return out
 
@@ -335,7 +269,7 @@ class UNet(nn.Module):
 model = UNet(n_class=len(labels['AFG'])).to(device)
 print(model)
 # %%
-summary(model, input_size=(3, 368, 368))
+summary(model, input_size=(14, 368, 368))
 # %%
 loss_func = nn.L1Loss()
 iterator = iter(train_dl)
@@ -417,7 +351,7 @@ _model.load_state_dict(weights)
 _model.eval()
 _model.to(device)
 # %%
-n = 10
+n = 20
 x = train_ds[n]['obsvariable'].unsqueeze(0).type(torch.float).to(device)
 print(x.shape)
 y = train_ds[n]['groundtruth'].to(device)
@@ -437,5 +371,5 @@ print(output.shape)
 # ax10.imshow(y[4,:,:].cpu().detach().numpy())
 fig, (ax1, ax6) = plt.subplots(nrows=1, ncols=2)
 ax1.imshow(output[0,0,:,:].cpu().detach().numpy())
-ax6.imshow(y[0,:,:].cpu().detach().numpy())
+ax6.imshow(lognorm_dist.cdf(y[0,:,:].cpu().detach().numpy()))
 # %%
