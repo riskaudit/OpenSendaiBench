@@ -6,30 +6,16 @@ import cv2
 import glob
 import matplotlib.pyplot as plt
 import seaborn as sns
-from skimage import io
-import rioxarray as rxr
-import copy
-import time
 from datetime import datetime
-from collections import defaultdict
 import numpy as np
 import scipy
-from scipy import stats
-from PIL import Image 
 
 import torch
 import torch.nn as nn
-
 import torch.optim as optim
 from torch.optim import lr_scheduler
-
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, models
-
-import torch.nn.functional as nnf
-from torch.nn.functional import relu
-import torch.nn.functional as F
-
 from torchsummary import summary
 
 import pytorch_lightning as pl
