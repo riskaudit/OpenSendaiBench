@@ -1,49 +1,8 @@
-labels = {'AFG': ['RS'],}
-# labels = {'AFG': ['A', 'C3L', 'RS', 'S', 'UFB'],
-#           'AGO': [],
-#           'BDI': [],
-#           'BEN': [],
-#           'BFA': [],
-#           'BGD': [],
-#           'BTN': [],
-#           'CAF': [],
-#           'COD': [],
-#           'COM': [],
-#           'DJI': [],
-#           'ERI': [],
-#           'ETH': [],
-#           'GIN': [],
-#           'GMB': [],
-#           'GNB': [],
-#           'HTI': [],
-#           'KHM': [],
-#           'KIR': [],
-#           'LAO': [],
-#           'LBR': [],
-#           'LSO': [],
-#           'MDG': [],
-#           'MLI': [],
-#           'MMR': [],
-#           'MOZ': [],
-#           'MRT': [],
-#           'MWI': [],
-#           'NER': [],
-#           'NPL': [],
-#           'RWA': [],
-#           'SDN': [],
-#           'SEN': [],
-#           'SLB': [],
-#           'SLE': [],
-#           'SOM': [],
-#           'SSD': [],
-#           'STP': [],
-#           'TCD': [],
-#           'TGO': [],
-#           'TLS': [],
-#           'TUV': [],
-#           'TZA': [],
-#           'UGA': [],
-#           'VUT': [],
-#           'YEM': [],
-#           'ZMB': []
-#           }
+# %%
+import pandas as pd
+data = pd.read_csv('bldgtype_country.csv')
+
+labels = {}
+for i in range(data.shape[0]):
+    labels[data['Country'][i]] = list(data.columns[(data == 1).iloc[i]])
+# %%
