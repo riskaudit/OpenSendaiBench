@@ -13,6 +13,7 @@ signals = {}
 for i in range(data1.shape[0]):
     signals[data1['Country'][i]] = list(data1.columns[(data1 == 1).iloc[i]])
 
+# number of tiles per country
 data2 = pd.read_csv('ntiles_country.csv')
 ntiles = {}
 for i in range(data1.shape[0]):
