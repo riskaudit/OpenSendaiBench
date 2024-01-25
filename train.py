@@ -121,3 +121,53 @@ for icountry in range(len(list(labels.keys()))):
                         +datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
                         +"_epoch_"+str(num_epochs)+".pt")
         torch.save(model.state_dict(), path2weights)
+        # %%
+        _model = model #UNet(n_class=len(labels['AFG']))
+        weights=torch.load(path2weights)
+        _model.load_state_dict(weights)
+        _model.eval()
+        _model.to(device)
+        # %%
+        import matplotlib.pyplot as plt
+        lognorm_dist = lognorm_dist_list[country]
+        # %%
+        iterator = iter(test_dl)
+        batch = next(iterator)
+        xb = batch['obsvariable'].type(torch.float).to(device)
+        yb = batch['groundtruth'].type(torch.float).to(device)
+        yb_h = _model(xb)
+
+        ### cdf charts
+        fig, axs = plt.subplots(nrows=2,
+                                ncols=len(lognorm_dist_list[country]),layout='compressed')
+        for i in range(len(lognorm_dist_list[country])):
+
+            # ground truth
+            f = axs[0,i].imshow(yb[0,i,:,:].cpu().detach().numpy(),
+                        cmap='viridis', vmin=0, vmax=1)
+            axs[0,i].set_title(str('GT - ' + 
+                                   str(list(lognorm_dist_list[country].keys())[i])))
+
+            # model prediction
+            f1 = axs[1,i].imshow(yb_h[0,i,:,:].cpu().detach().numpy(),
+                        cmap='viridis', vmin=0, vmax=1)
+            axs[1,i].set_title(str('ES - ' + 
+                                   str(list(lognorm_dist_list[country].keys())[i])))
+
+        plt.setp(plt.gcf().get_axes(), xticks=[], yticks=[])
+        cbar = fig.colorbar(f, shrink=0.95)
+        cbar = fig.colorbar(f1, shrink=0.95)
+
+
+        ###
+        # max_value = max(lognorm_dist.ppf(yb[0,0,:,:].cpu().detach().numpy()).max(),
+        #                 lognorm_dist.ppf(yb_h[0,0,:,:].cpu().detach().numpy()).max())
+        # fig1, axs1 = plt.subplots(nrows=1,ncols=2,layout='compressed')
+        # f1 = axs1[0].imshow(lognorm_dist.ppf(yb[0,0,:,:].cpu().detach().numpy()),
+        #                 cmap='viridis', vmin=0, vmax=max_value)
+        # axs1[0].set_title('Groundtruth, nbldg')
+        # f1 = axs1[1].imshow(lognorm_dist.ppf(yb_h[0,0,:,:].cpu().detach().numpy()),
+        #                 cmap='viridis', vmin=0, vmax=max_value)
+        # axs1[1].set_title('Estimated, nbldg')
+        # axs1 = fig.colorbar(f1, shrink=0.95)
+# %%
