@@ -3,18 +3,14 @@ from constants import labels, signals, ntiles
 from util import OpenSendaiBenchDataset, fitlognorm
 from model import ModifiedResNet50, Segmentation
 
-import matplotlib.pyplot as plt
 from datetime import datetime
 import numpy as np
-import scipy
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, models
-from torchsummary import summary
+from torch.utils.data import DataLoader
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -60,25 +56,14 @@ for icountry in range(len(list(labels.keys()))):
         loss_func = nn.L1Loss()
         iterator = iter(train_dl)
         model = ModifiedResNet50(country).to(device)
-
-        # for batch_idx in range(len(train_dl)):
-        #     data_batch = next(iterator)
-        #     xb = data_batch['obsvariable'].type(torch.float).to(device)
-        #     print(xb.shape)
-        #     yb = data_batch['groundtruth'].type(torch.float).to(device)
-        #     # out = (torch.reshape(torch.sigmoid(model(xb)),
-        #     #                         (train_dl.batch_size,len(labels[country]),8,8)).to(device)-0.5)/0.5
-        #     out = model(xb)
-        #     print(out.shape)
-        #     loss = loss_func(out, yb)
-        #     print(loss)
-        #     print(loss.item())
-        #     break
-
         # %%
         opt = optim.Adam(model.parameters(), lr=1e-4)
         opt.step()
         opt.zero_grad()
+        scheduler = lr_scheduler.LinearLR(opt, 
+                                          start_factor=1.0, 
+                                          end_factor=0.3, 
+                                          total_iters=10)
         # %%
         class RMSELoss(nn.Module):
             def __init__(self, eps=1e-6):
@@ -113,6 +98,7 @@ for icountry in range(len(list(labels.keys()))):
                 loss+=loss_b
                 if metric_b is not None:
                     metric+=metric_b
+            scheduler.step()
             loss/=len_data
             metric/=len_data
             return loss, metric
@@ -125,10 +111,9 @@ for icountry in range(len(list(labels.keys()))):
                     val_loss, val_metric=loss_epoch(model,loss_func,val_dl)
                 accuracy=val_metric #100*val_metric
                 print("epoch: %d, train loss: %.10f, val loss: %.10f, rmse: %.6f" %(epoch, train_loss,val_loss,accuracy))
-
         # %%
         model.train()
-        num_epochs = 50
+        num_epochs = 100
         train_val(num_epochs,  model.to(device), loss_func, 
                   opt, train_dl, val_dl=valid_dl)
         # %%
