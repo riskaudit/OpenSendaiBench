@@ -50,7 +50,7 @@ class OpenSendaiBenchDataset(Dataset):
         k = self.ifile[i]
         obsvariable = np.zeros([len(self.signal),368,368])
         for s in range(len(self.signal)):
-            for file in glob.glob(str(os.getcwd()+self.obsvariables_path+
+            for file in glob.glob(str(self.obsvariables_path+
                                     '**/'+self.country+'_*/'+self.country+'_'+
                                     str(k)+'_'+'of_*/2019*_'+self.signal[s]+'.tif')):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
@@ -59,7 +59,7 @@ class OpenSendaiBenchDataset(Dataset):
                 
         groundtruth = np.zeros([len(labels[self.country]),8,8])
         for w in range(len(labels[self.country])): 
-            for file in glob.glob(str(os.getcwd()+self.groundtruth_path+
+            for file in glob.glob(str(self.groundtruth_path+
                                       self.country+'*/tiles/images/'+
                                       self.country+'_nbldg_'+labels[self.country][w]+'_'+str(k)+'_'+'of_'+'*.tif')):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
