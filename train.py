@@ -64,6 +64,7 @@ for icountry in range(len(list(labels.keys()))):
         # %%
         loss_func = nn.L1Loss()
         iterator = iter(train_dl)
+        model = ModifiedResNet50(country).to(device)
 
         for batch_idx in range(len(train_dl)):
             data_batch = next(iterator)
@@ -72,7 +73,7 @@ for icountry in range(len(list(labels.keys()))):
             yb = data_batch['groundtruth'].type(torch.float).to(device)
             # out = (torch.reshape(torch.sigmoid(model(xb)),
             #                         (train_dl.batch_size,len(labels[country]),8,8)).to(device)-0.5)/0.5
-            out = ModifiedResNet50(country)(xb)
+            out = model(xb)
             print(out.shape)
             loss = loss_func(out, yb)
             print(loss)
