@@ -8,14 +8,14 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from torchvision import transforms
-from constants import labels
+from constants import labels, signals
 
 class OpenSendaiBenchDataset(Dataset):
     """
     An implementation of a PyTorch dataset for loading pairs of observable variables and ground truth labels.
     Inspired by https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
     """
-    def __init__(self, sigma: float, mu: float, obsvariables_path: str, groundtruth_path: str, country: str, signals: list, transform: transforms = None):
+    def __init__(self, obsvariables_path: str, groundtruth_path: str, country: str, signals: list, lognorm_dist: dict, transform: transforms = None):
         """
         Constructs an OpenSendaiBenchDataset.
         :param obsvariables_path: Path to the source folder of observable variables
@@ -27,8 +27,7 @@ class OpenSendaiBenchDataset(Dataset):
         self.country = country
         self.signals = signals
         self.transform = transform
-        self.lognorm_dist = scipy.stats.lognorm(s=sigma, 
-                                                loc=0, scale=np.exp(mu))
+        self.lognorm_dist = lognorm_dist
 
     def __len__(self):
         """
