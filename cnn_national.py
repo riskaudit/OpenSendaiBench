@@ -1,5 +1,5 @@
 # %% import packages
-from constants import labels
+from constants import labels, signals, ntiles
 from util import OpenSendaiBenchDataset, fitlognorm
 
 import matplotlib.pyplot as plt
@@ -21,15 +21,19 @@ device = torch.device("mps")
 # %% lognorm fit
 lognorm_dist_list = fitlognorm(groundtruth_path=
                                '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/')
-# %%
-train_ds = OpenSendaiBenchDataset(      obsvariables_path="/obsvariables/", 
-                                        groundtruth_path="/groundtruth/", 
-                                        country='AFG', 
-                                        # signals = ['blue','green','red'])
-                                        signals = ['VH','VV','aerosol','blue','green','red','red1','red2','red3','nir','red4','vapor','swir1','swir2'],
-                                        sigma=sigma, mu=mu)
-print(train_ds[1]['groundtruth'].shape)
-print(train_ds[1]['obsvariable'].shape)
+
+# %% national or country-level
+for icountry in range(len(list(labels.keys()))):
+    country = list(labels.keys())[icountry]
+    train_ds = OpenSendaiBenchDataset(  obsvariables_path=
+                                        '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
+                                        groundtruth_path=
+                                        '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/',
+                                        country=country, 
+                                        signal = signals[country],
+                                        lognorm_dist = lognorm_dist_list[country])
+    print(train_ds[1]['groundtruth'].shape)
+    print(train_ds[1]['obsvariable'].shape)
 # %%
 train_dl = DataLoader(train_ds, batch_size=10, shuffle=True)
 len(train_dl)
