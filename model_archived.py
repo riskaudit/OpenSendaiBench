@@ -1,4 +1,4 @@
-""" 
+"""  
 AI4ER GTC - Sea Ice Classification
 Classes for image segmentation and a basic Unet model
 """
