@@ -8,14 +8,14 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from torchvision import transforms
-from constants import labels, signals
+from constants import labels
 
 class OpenSendaiBenchDataset(Dataset):
     """
     An implementation of a PyTorch dataset for loading pairs of observable variables and ground truth labels.
     Inspired by https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
     """
-    def __init__(self, obsvariables_path: str, groundtruth_path: str, country: str, signals: list, lognorm_dist: dict, transform: transforms = None):
+    def __init__(self, obsvariables_path: str, groundtruth_path: str, country: str, signal: list, lognorm_dist: dict, transform: transforms = None):
         """
         Constructs an OpenSendaiBenchDataset.
         :param obsvariables_path: Path to the source folder of observable variables
@@ -25,7 +25,7 @@ class OpenSendaiBenchDataset(Dataset):
         self.obsvariables_path = obsvariables_path
         self.groundtruth_path = groundtruth_path
         self.country = country
-        self.signals = signals
+        self.signal = signal
         self.transform = transform
         self.lognorm_dist = lognorm_dist
 
@@ -45,11 +45,11 @@ class OpenSendaiBenchDataset(Dataset):
         :return: Dictionary with pairs of observable variables and ground truth labels.
         """
 
-        obsvariable = np.zeros([len(self.signals),368,368])
-        for s in range(len(self.signals)):
+        obsvariable = np.zeros([len(self.signal),368,368])
+        for s in range(len(self.signal)):
             for file in glob.glob(str(os.getcwd()+self.obsvariables_path+
                                     '**/'+self.country+'_*/'+self.country+'_'+
-                                    str(i)+'_'+'of_*/2019*_'+self.signals[s]+'.tif')):
+                                    str(i)+'_'+'of_*/2019*_'+self.signal[s]+'.tif')):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
                 a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
                 obsvariable[s,:,:] = a.reshape(1,a.shape[0],a.shape[1])
@@ -60,7 +60,7 @@ class OpenSendaiBenchDataset(Dataset):
                                       self.country+'*/tiles/images/'+
                                       self.country+'_nbldg_'+labels[self.country][w]+'_'+str(i)+'_'+'of_'+'*.tif')):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
-                groundtruth[w,:,:] = self.lognorm_dist.cdf(a.reshape(1,a.shape[0],a.shape[1]))
+                groundtruth[w,:,:] = self.lognorm_dist[labels[self.country][w]]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1]))
 
         obsvariable = torch.from_numpy(obsvariable).float() #.unsqueeze(0)
         # obsvariable_8x8 = torch.from_numpy(obsvariable_8x8).float()
@@ -79,10 +79,10 @@ class OpenSendaiBenchDataset(Dataset):
         :return: None
         """
         sample = self[i]
-        fig1, axs1 = plt.subplots(1,len(self.signals))
-        for s in range(len(self.signals)):
+        fig1, axs1 = plt.subplots(1,len(self.signal))
+        for s in range(len(self.signal)):
             axs1[s].imshow(sample['obsvariable'][s,:,:])
-            axs1[s].set_title(str(self.signals[s]))
+            axs1[s].set_title(str(self.signal[s]))
             axs1[s].set_xticks([])
             axs1[s].set_yticks([])
         plt.tight_layout()
