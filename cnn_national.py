@@ -24,17 +24,17 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 # %% set device to mps (if working with Mac with MPS)
 device = torch.device("mps")
 # %% select a country
+lognorm_dist_list = {}
+
 for icountry in range(len(list(labels.keys()))):
     # icountry = 0
     country = list(labels.keys())[icountry]
     data_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/'
     groundtruth_path = data_path+'groundtruth/METEOR_PROJECT_2002/'+str(country)+'_oed_exposure_20200811/'
     f, ax = plt.subplots(ncols=1, nrows=len(labels[country]), figsize=(7, 5*len(labels[country])))
-    lognorm_dist_list = []
-    sigma_list = []
-    mu_list = []
-    KStest_list = []
-    KStest_pvalue = []
+    plt.ioff()
+    lognorm_dist_list[country] = {}
+    # get the lognormal fitting parameters for each building type
     for ibldgtype in range(len(labels[country])):
         nbldg_file = groundtruth_path+'attr_rasterized/'+str(country)+'_nbldg_'+str(labels[country][ibldgtype])+'.tif'
         mask_file = groundtruth_path+str(country)+"_country.tif"
@@ -54,11 +54,12 @@ for icountry in range(len(list(labels.keys()))):
         lognorm_dist = scipy.stats.lognorm(s=sigma, loc=0, scale=np.exp(mu))
         lognormal_test = scipy.stats.kstest(x_exp, lognorm_dist.cdf)
 
-        lognorm_dist_list.append(lognorm_dist)
-        sigma_list.append(sigma)
-        mu_list.append(mu)
-        KStest_list.append(lognormal_test.statistic)
-        KStest_pvalue.append(lognormal_test.pvalue)
+        lognorm_dist_list[country][labels[country][ibldgtype]] = {}
+        lognorm_dist_list[country][labels[country][ibldgtype]]['modelfit'] = lognorm_dist
+        lognorm_dist_list[country][labels[country][ibldgtype]]['mu'] = mu
+        lognorm_dist_list[country][labels[country][ibldgtype]]['sigma'] = sigma
+        lognorm_dist_list[country][labels[country][ibldgtype]]['KStest_stat'] = lognormal_test.statistic
+        lognorm_dist_list[country][labels[country][ibldgtype]]['KStest_pvalue'] = lognormal_test.pvalue
 
         sns.distplot(x_exp, ax=ax[ibldgtype], norm_hist=True, kde=False,
                     label='Data')
@@ -69,10 +70,6 @@ for icountry in range(len(list(labels.keys()))):
         ax[ibldgtype].title.set_text(str(labels[country][ibldgtype]))
         ax[ibldgtype].legend(loc='upper right')
 
-    np.savetxt('./lognorm/report/'+str(country)+'.csv',
-        list(zip(labels[country],mu_list,sigma_list,KStest_list,KStest_pvalue)),
-        delimiter =", ",
-        fmt ='% s')
     f.savefig('./lognorm/histogram/'+str(country)+'.png')
  
 # %%
