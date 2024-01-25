@@ -1,108 +1,75 @@
-"""
-AI4ER GTC - Sea Ice Classification
-Classes for loading the data for input to the models
-and visualising the data
-"""
+import os
+import glob
+import cv2
+import scipy
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-import rioxarray as rxr
 from torch.utils.data import Dataset
 from torchvision import transforms
-from pytorch_lightning import Callback
-import pandas as pd
+from constants import labels
 
-
-class SeaIceDataset(Dataset):
+class OpenSendaiBenchDataset(Dataset):
     """
-    An implementation of a PyTorch dataset for loading sea ice SAR/chart image pairs.
+    An implementation of a PyTorch dataset for loading pairs of observable variables and ground truth labels.
     Inspired by https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
     """
-
-    def __init__(self, sar_path: str, sar_files: list[str],
-                 chart_path: str, chart_files: list[str],
-                 transform: transforms.Compose = transforms.Compose([]),
-                 class_categories: dict = None,
-                 sar_band3: str = "angle"):
+    def __init__(self, sigma: float, mu: float, obsvariables_path: str, groundtruth_path: str, country: str, signals: list, transform: transforms = None):
         """
-        Constructs a SeaIceDataset.
-        :param sar_path: Base folder path of SAR images
-        :param sar_files: List of filenames of SAR images
-        :param chart_path: Base folder path of charts
-        :param chart_files: List of filenames of charts
+        Constructs an OpenSendaiBenchDataset.
+        :param obsvariables_path: Path to the source folder of observable variables
+        :param groundtruth_path: Path to the source folder of corresponding ground truth labels
         :param transform: Callable transformation to apply to images upon loading
-        :param class_categories: Mapping from SIGRID codes to target classes
-        :param sar_band3: "angle" to use SAR incidence angle or "ratio" to use HH/HV as third band
         """
-        self.sar_path = sar_path
-        self.sar_files = sar_files
-        self.chart_path = chart_path
-        self.chart_files = chart_files
+        self.obsvariables_path = obsvariables_path
+        self.groundtruth_path = groundtruth_path
+        self.country = country
+        self.signals = signals
         self.transform = transform
-        self.class_categories = class_categories
-        self.sar_band3 = sar_band3
-
-        # read in precomputed mean and std deviation for HH, HV, incidence angle, and ratio
-        metrics_df = pd.read_csv("metrics.csv", delimiter=",")
-        self.hh_mean = metrics_df.iloc[0]["hh_mean"]
-        self.hh_std = metrics_df.iloc[0]["hh_std"]
-        self.hv_mean = metrics_df.iloc[0]["hv_mean"]
-        self.hv_std = metrics_df.iloc[0]["hv_std"]
-        self.angle_mean = metrics_df.iloc[0]["angle_mean"]
-        self.angle_std = metrics_df.iloc[0]["angle_std"]
-        self.ratio_mean = metrics_df.iloc[0]["hh_hv_mean"]
-        self.ratio_std = metrics_df.iloc[0]["hh_hv_std"]
-
-        # handle sar_band3
-        if self.sar_band3 == "angle":
-            self.band3_mean = self.angle_mean
-            self.band3_std = self.angle_std
-        else:
-            self.sar_path = f"{self.sar_path}_band3"
-            self.band3_mean = self.ratio_mean
-            self.band3_std = self.ratio_std
+        self.lognorm_dist = scipy.stats.lognorm(s=sigma, 
+                                                loc=0, scale=np.exp(mu))
 
     def __len__(self):
         """
         Implements the len(SeaIceDataset) magic method. Required to implement by Dataset superclass.
         When training/testing, this method tells our training loop how much longer we have to go in our Dataset.
-        :return: Length of SeaIceDataset
+        :return: Length of OpenSendaiBenchDataset
         """
-        return len(self.sar_files)
+        return 100 #len(self.groundtruth_files)/labels[self.country]
 
     def __getitem__(self, i: int):
         """
-        Implements the SeaIceDataset[i] magic method. Required to implement by Dataset superclass.
-        When training/testing, this method is used to actually fetch data and apply transformations.
+        Implements the OpenSendaiBenchDataset[i] magic method. Required to implement by Dataset superclass.
+        When training/testing, this method is used to actually fetch data.
         :param i: Index of which image pair to fetch
-        :return: Dictionary with SAR and chart pair
+        :return: Dictionary with pairs of observable variables and ground truth labels.
         """
 
-        # load data from files
-        sar_name = f"{self.sar_path}/{self.sar_files[i]}"
-        chart_name = f"{self.chart_path}/{self.chart_files[i]}"
-        sar = rxr.open_rasterio(sar_name, masked=True).values  # take all bands for shape of l x w x 3
-        chart = rxr.open_rasterio(chart_name, masked=True).values  # take array of shape l x w
+        obsvariable = np.zeros([len(self.signals),368,368])
+        for s in range(len(self.signals)):
+            for file in glob.glob(str(os.getcwd()+self.obsvariables_path+
+                                    '**/'+self.country+'_*/'+self.country+'_'+
+                                    str(i)+'_'+'of_*/2019*_'+self.signals[s]+'.tif')):
+                a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
+                a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
+                obsvariable[s,:,:] = a.reshape(1,a.shape[0],a.shape[1])
+                
+        groundtruth = np.zeros([len(labels[self.country]),8,8])
+        for w in range(len(labels[self.country])): 
+            for file in glob.glob(str(os.getcwd()+self.groundtruth_path+
+                                      self.country+'*/tiles/images/'+
+                                      self.country+'_nbldg_'+labels[self.country][w]+'_'+str(i)+'_'+'of_'+'*.tif')):
+                a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
+                groundtruth[w,:,:] = self.lognorm_dist.cdf(a.reshape(1,a.shape[0],a.shape[1]))
 
-        # recategorize classes 
-        if self.class_categories is not None:
-            for key, value in self.class_categories.items():
-                chart[np.isin(chart, value)] = key
-
-        # apply transforms
-        sample = {"sar": sar, "chart": chart, "sar_name": sar_name, "chart_name": chart_name}
-        if self.transform is not None:
-            # Convert the data to tensors
-            sar = torch.from_numpy(sar)
-            chart = torch.from_numpy(chart)
-
-            # normalise the sar data with mean and std deviation for each channel
-            sar_transform = transforms.Compose([transforms.Normalize(mean=[self.hh_mean, self.hv_mean, self.band3_mean],
-                                                                     std=[self.hh_std, self.hv_std, self.band3_std])])
-            sar = sar_transform(sar)
-            sample = {"sar": self.transform(sar), "chart": self.transform(chart).squeeze(0).long(),
-                      "sar_name": sar_name, "chart_name": chart_name}
-
+        obsvariable = torch.from_numpy(obsvariable).float() #.unsqueeze(0)
+        # obsvariable_8x8 = torch.from_numpy(obsvariable_8x8).float()
+        groundtruth = torch.from_numpy(groundtruth).float() #.unsqueeze(0)
+    
+        sample = {"obsvariable": obsvariable, "groundtruth": groundtruth}
+        if self.transform:
+            sample = {"obsvariable": self.transform(obsvariable),
+                      "groundtruth": self.transform(groundtruth).squeeze(0).long()}
         return sample
 
     def visualise(self, i):
@@ -112,81 +79,18 @@ class SeaIceDataset(Dataset):
         :return: None
         """
         sample = self[i]
-        fig, ax = plt.subplots(1, 2)
-        ax[0].imshow(sample["sar"])
-        ax[1].imshow(sample["chart"])
+        fig1, axs1 = plt.subplots(1,len(self.signals))
+        for s in range(len(self.signals)):
+            axs1[s].imshow(sample['obsvariable'][s,:,:])
+            axs1[s].set_title(str(self.signals[s]))
+            axs1[s].set_xticks([])
+            axs1[s].set_yticks([])
         plt.tight_layout()
-        plt.show()
-
-
-class Visualise(Callback):
-    """
-    Callback to visualise input/output samples and predictions.
-    """
-    def __init__(self, dataloader, n_files, classification_type):
-        """
-        Construct callback object.
-        """
-        self.dataloader = dataloader
-        self.n_files = n_files
-        if classification_type == "binary":
-            self.vmax = 1  # upper bound of color bar for prediction and truth
-        elif classification_type == "ternary":
-            self.vmax = 2  # upper bound of color bar for prediction and truth
-        elif classification_type == "multiclass":
-            self.vmax = 100  # upper bound of color bar for prediction and truth
-        else:
-            raise ValueError(f"Invalid classification_type: {classification_type}")
-
-    def on_validation_epoch_start(self, trainer, pl_module):
-        """
-        Callback to run on validation epoch start.
-        :param trainer: PyTorch Lightning Trainer class instance
-        :param pl_module: PyTorch Lightning Module class instance
-        """
-        for batch in self.dataloader:
-            x, y = batch["sar"].to(pl_module.device), batch["chart"].squeeze().long().to(pl_module.device)
-            y_hat = pl_module(x)
-            y_hat_pred = y_hat.argmax(dim=1)
-            fig, ax = plt.subplots(self.n_files, 5, figsize=(15, self.n_files * 3))
-            for i in range(self.n_files):
-                a = x[i].detach().cpu().numpy().transpose(1, 2, 0)
-                ax[i, 0].imshow(a[:, :, 0])
-                ax[i, 0].set_title("SAR Band 1")
-                ax[i, 1].imshow(a[:, :, 1])
-                ax[i, 1].set_title("SAR Band 2")
-                ax[i, 2].imshow(a[:, :, 2])
-                ax[i, 2].set_title("SAR Band 3")
-                ax[i, 3].imshow(y_hat_pred[i].detach().cpu().numpy(), vmin=0, vmax=self.vmax)
-                ax[i, 3].set_title("Prediction")
-                ax[i, 4].imshow(y[i].detach().cpu().numpy(), vmin=0, vmax=self.vmax)
-                ax[i, 4].set_title("Truth")
-            plt.tight_layout()
-            wandb_logger = trainer.logger.experiment
-            wandb_logger.log({"val_image": fig})
-            plt.close(fig)
-            break  # only visualise from first batch
-
-    def on_test_epoch_start(self, trainer, pl_module):
-        for batch in self.dataloader:
-            x, y = batch["sar"].to(pl_module.device), batch["chart"].squeeze().long().to(pl_module.device)
-            y_hat = pl_module(x)
-            y_hat_pred = y_hat.argmax(dim=1)
-            fig, ax = plt.subplots(self.n_files, 5, figsize=(15, self.n_files * 3))
-            for i in range(self.n_files):
-                a = x[i].detach().cpu().numpy().transpose(1, 2, 0)
-                ax[i, 0].imshow(a[:, :, 0])
-                ax[i, 0].set_title("SAR Band 1")
-                ax[i, 1].imshow(a[:, :, 1])
-                ax[i, 1].set_title("SAR Band 2")
-                ax[i, 2].imshow(a[:, :, 2])
-                ax[i, 2].set_title("SAR Band 3")
-                ax[i, 3].imshow(y_hat_pred[i].detach().cpu().numpy(), vmin=0, vmax=self.vmax)
-                ax[i, 3].set_title("Prediction")
-                ax[i, 4].imshow(y[i].detach().cpu().numpy(), vmin=0, vmax=self.vmax)
-                ax[i, 4].set_title("Truth")
-            plt.tight_layout()
-            wandb_logger = trainer.logger.experiment
-            wandb_logger.log({"test_image": fig})
-            plt.close(fig)
-            break  # only visualise from first batch
+ 
+        fig2, axs2 = plt.subplots(1,len(labels[self.country]))
+        for w in range(len(labels[self.country])): 
+            axs2[w].imshow(sample['groundtruth'][w,:,:])
+            axs2[w].set_title(labels[self.country][w])
+            axs2[w].set_xticks([])
+            axs2[w].set_yticks([])
+        plt.tight_layout()
