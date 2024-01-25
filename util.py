@@ -104,7 +104,7 @@ def fitlognorm(groundtruth_path: str):
         country = list(labels.keys())[icountry]
         datapath = groundtruth_path+str(country)+'_oed_exposure_20200811/'
         f, ax = plt.subplots(ncols=1, nrows=len(labels[country]), figsize=(7, 5*len(labels[country])))
-        plt.ioff()
+        
         lognorm_dist_list[country] = {}
         # get the lognormal fitting parameters for each building type
         for ibldgtype in range(len(labels[country])):
