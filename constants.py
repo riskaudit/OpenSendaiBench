@@ -12,4 +12,9 @@ data1 = pd.read_csv('signals_country.csv')
 signals = {}
 for i in range(data1.shape[0]):
     signals[data1['Country'][i]] = list(data1.columns[(data1 == 1).iloc[i]])
+
+data2 = pd.read_csv('ntiles_country.csv')
+ntiles = {}
+for i in range(data1.shape[0]):
+    ntiles[data1['Country'][i]] = data2.iloc[i]['ntiles']
 # %%
