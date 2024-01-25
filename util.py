@@ -4,6 +4,7 @@ import cv2
 import scipy
 import torch
 import numpy as np
+import seaborn as sns
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -94,3 +95,53 @@ class OpenSendaiBenchDataset(Dataset):
             axs2[w].set_xticks([])
             axs2[w].set_yticks([])
         plt.tight_layout()
+
+def fitlognorm(groundtruth_path: str):
+    lognorm_dist_list = {}
+    if not os.path.exists('./lognorm/'): 
+        os.makedirs('./lognorm/')
+    for icountry in range(len(list(labels.keys()))):
+        country = list(labels.keys())[icountry]
+        datapath = groundtruth_path+str(country)+'_oed_exposure_20200811/'
+        f, ax = plt.subplots(ncols=1, nrows=len(labels[country]), figsize=(7, 5*len(labels[country])))
+        plt.ioff()
+        lognorm_dist_list[country] = {}
+        # get the lognormal fitting parameters for each building type
+        for ibldgtype in range(len(labels[country])):
+            nbldg_file = datapath+'attr_rasterized/'+str(country)+'_nbldg_'+str(labels[country][ibldgtype])+'.tif'
+            mask_file = datapath+str(country)+"_country.tif"
+            nb = cv2.imread(nbldg_file, cv2.IMREAD_UNCHANGED)
+            mask = cv2.imread(mask_file, cv2.IMREAD_UNCHANGED)
+            nb_masked = nb.flatten()[mask.flatten()>0]
+            nb_masked = nb_masked[nb_masked != 0]
+
+            x_exp = nb_masked
+            mu = np.mean(np.log(nb_masked))
+            sigma = np.std(np.log(nb_masked)) 
+            mu_exp = np.exp(mu) 
+            sigma_exp = np.exp(sigma)
+            fitting_params_lognormal = scipy.stats.lognorm.fit(x_exp, floc=0, scale=mu_exp)
+            lognorm_dist_fitted = scipy.stats.lognorm(*fitting_params_lognormal)
+            t = np.linspace(np.min(x_exp), np.max(x_exp), 100)
+            lognorm_dist = scipy.stats.lognorm(s=sigma, loc=0, scale=np.exp(mu))
+            lognormal_test = scipy.stats.kstest(x_exp, lognorm_dist.cdf)
+
+            lognorm_dist_list[country][labels[country][ibldgtype]] = {}
+            lognorm_dist_list[country][labels[country][ibldgtype]]['modelfit'] = lognorm_dist
+            lognorm_dist_list[country][labels[country][ibldgtype]]['mu'] = mu
+            lognorm_dist_list[country][labels[country][ibldgtype]]['sigma'] = sigma
+            lognorm_dist_list[country][labels[country][ibldgtype]]['KStest_stat'] = lognormal_test.statistic
+            lognorm_dist_list[country][labels[country][ibldgtype]]['KStest_pvalue'] = lognormal_test.pvalue
+
+            sns.distplot(x_exp, ax=ax[ibldgtype], norm_hist=True, kde=False,
+                        label='Data')
+            ax[ibldgtype].plot(t, lognorm_dist_fitted.pdf(t), lw=2, color='r',
+                    label='Fitted Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist_fitted.mean(), lognorm_dist_fitted.std()))
+            ax[ibldgtype].plot(t, lognorm_dist.pdf(t), lw=2, color='g', ls=':',
+                    label='Original Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist.mean(), lognorm_dist.std()))
+            ax[ibldgtype].title.set_text(str(labels[country][ibldgtype]))
+            ax[ibldgtype].legend(loc='upper right')
+
+        f.savefig('./lognorm/'+str(country)+'.png')
+
+    return lognorm_dist_list
