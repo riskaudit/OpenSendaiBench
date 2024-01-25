@@ -15,4 +15,4 @@ class ModifiedResNet50(nn.Module):
 
     def forward(self, x):
         return (torch.reshape(torch.sigmoid(self.model(x)),
-                (x.batch_size,len(labels[self.country]),8,8))-0.5)/0.5
+                (x.shape[0],len(labels[self.country]),8,8))-0.5)/0.5
