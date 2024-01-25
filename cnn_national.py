@@ -1,15 +1,11 @@
 # %% import packages
 from constants import labels
+from util import OpenSendaiBenchDataset, fitlognorm
 
-import os
-import cv2
-import glob
 import matplotlib.pyplot as plt
-import seaborn as sns
 from datetime import datetime
 import numpy as np
 import scipy
-import csv
 
 import torch
 import torch.nn as nn
@@ -21,143 +17,10 @@ from torchsummary import summary
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-# %% set device to mps (if working with Mac with MPS)
 device = torch.device("mps")
-# %% select a country
-lognorm_dist_list = {}
-
-for icountry in range(len(list(labels.keys()))):
-    # icountry = 0
-    country = list(labels.keys())[icountry]
-    data_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/'
-    groundtruth_path = data_path+'groundtruth/METEOR_PROJECT_2002/'+str(country)+'_oed_exposure_20200811/'
-    f, ax = plt.subplots(ncols=1, nrows=len(labels[country]), figsize=(7, 5*len(labels[country])))
-    plt.ioff()
-    lognorm_dist_list[country] = {}
-    # get the lognormal fitting parameters for each building type
-    for ibldgtype in range(len(labels[country])):
-        nbldg_file = groundtruth_path+'attr_rasterized/'+str(country)+'_nbldg_'+str(labels[country][ibldgtype])+'.tif'
-        mask_file = groundtruth_path+str(country)+"_country.tif"
-        nb = cv2.imread(nbldg_file, cv2.IMREAD_UNCHANGED)
-        mask = cv2.imread(mask_file, cv2.IMREAD_UNCHANGED)
-        nb_masked = nb.flatten()[mask.flatten()>0]
-        nb_masked = nb_masked[nb_masked != 0]
-
-        x_exp = nb_masked
-        mu = np.mean(np.log(nb_masked))
-        sigma = np.std(np.log(nb_masked)) 
-        mu_exp = np.exp(mu) 
-        sigma_exp = np.exp(sigma)
-        fitting_params_lognormal = scipy.stats.lognorm.fit(x_exp, floc=0, scale=mu_exp)
-        lognorm_dist_fitted = scipy.stats.lognorm(*fitting_params_lognormal)
-        t = np.linspace(np.min(x_exp), np.max(x_exp), 100)
-        lognorm_dist = scipy.stats.lognorm(s=sigma, loc=0, scale=np.exp(mu))
-        lognormal_test = scipy.stats.kstest(x_exp, lognorm_dist.cdf)
-
-        lognorm_dist_list[country][labels[country][ibldgtype]] = {}
-        lognorm_dist_list[country][labels[country][ibldgtype]]['modelfit'] = lognorm_dist
-        lognorm_dist_list[country][labels[country][ibldgtype]]['mu'] = mu
-        lognorm_dist_list[country][labels[country][ibldgtype]]['sigma'] = sigma
-        lognorm_dist_list[country][labels[country][ibldgtype]]['KStest_stat'] = lognormal_test.statistic
-        lognorm_dist_list[country][labels[country][ibldgtype]]['KStest_pvalue'] = lognormal_test.pvalue
-
-        sns.distplot(x_exp, ax=ax[ibldgtype], norm_hist=True, kde=False,
-                    label='Data')
-        ax[ibldgtype].plot(t, lognorm_dist_fitted.pdf(t), lw=2, color='r',
-                label='Fitted Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist_fitted.mean(), lognorm_dist_fitted.std()))
-        ax[ibldgtype].plot(t, lognorm_dist.pdf(t), lw=2, color='g', ls=':',
-                label='Original Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist.mean(), lognorm_dist.std()))
-        ax[ibldgtype].title.set_text(str(labels[country][ibldgtype]))
-        ax[ibldgtype].legend(loc='upper right')
-
-    f.savefig('./lognorm/histogram/'+str(country)+'.png')
- 
-# %%
-class OpenSendaiBenchDataset(Dataset):
-    """
-    An implementation of a PyTorch dataset for loading pairs of observable variables and ground truth labels.
-    Inspired by https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
-    """
-    def __init__(self, sigma: float, mu: float, obsvariables_path: str, groundtruth_path: str, country: str, signals: list, transform: transforms = None):
-        """
-        Constructs an OpenSendaiBenchDataset.
-        :param obsvariables_path: Path to the source folder of observable variables
-        :param groundtruth_path: Path to the source folder of corresponding ground truth labels
-        :param transform: Callable transformation to apply to images upon loading
-        """
-        self.obsvariables_path = obsvariables_path
-        self.groundtruth_path = groundtruth_path
-        self.country = country
-        self.signals = signals
-        self.transform = transform
-        self.lognorm_dist = scipy.stats.lognorm(s=sigma, 
-                                                loc=0, scale=np.exp(mu))
-
-    def __len__(self):
-        """
-        Implements the len(SeaIceDataset) magic method. Required to implement by Dataset superclass.
-        When training/testing, this method tells our training loop how much longer we have to go in our Dataset.
-        :return: Length of OpenSendaiBenchDataset
-        """
-        return 100 #len(self.groundtruth_files)/labels[self.country]
-
-    def __getitem__(self, i: int):
-        """
-        Implements the OpenSendaiBenchDataset[i] magic method. Required to implement by Dataset superclass.
-        When training/testing, this method is used to actually fetch data.
-        :param i: Index of which image pair to fetch
-        :return: Dictionary with pairs of observable variables and ground truth labels.
-        """
-
-        obsvariable = np.zeros([len(self.signals),368,368])
-        for s in range(len(self.signals)):
-            for file in glob.glob(str(os.getcwd()+self.obsvariables_path+
-                                    '**/'+self.country+'_*/'+self.country+'_'+
-                                    str(i)+'_'+'of_*/2019*_'+self.signals[s]+'.tif')):
-                a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
-                a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
-                obsvariable[s,:,:] = a.reshape(1,a.shape[0],a.shape[1])
-                
-        groundtruth = np.zeros([len(labels[self.country]),8,8])
-        for w in range(len(labels[self.country])): 
-            for file in glob.glob(str(os.getcwd()+self.groundtruth_path+
-                                      self.country+'*/tiles/images/'+
-                                      self.country+'_nbldg_'+labels[self.country][w]+'_'+str(i)+'_'+'of_'+'*.tif')):
-                a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
-                groundtruth[w,:,:] = self.lognorm_dist.cdf(a.reshape(1,a.shape[0],a.shape[1]))
-
-        obsvariable = torch.from_numpy(obsvariable).float() #.unsqueeze(0)
-        # obsvariable_8x8 = torch.from_numpy(obsvariable_8x8).float()
-        groundtruth = torch.from_numpy(groundtruth).float() #.unsqueeze(0)
-    
-        sample = {"obsvariable": obsvariable, "groundtruth": groundtruth}
-        if self.transform:
-            sample = {"obsvariable": self.transform(obsvariable),
-                      "groundtruth": self.transform(groundtruth).squeeze(0).long()}
-        return sample
-
-    def visualise(self, i):
-        """
-        Allows us to visualise a particular SAR/chart pair.
-        :param i: Index of which image pair to visualise
-        :return: None
-        """
-        sample = self[i]
-        fig1, axs1 = plt.subplots(1,len(self.signals))
-        for s in range(len(self.signals)):
-            axs1[s].imshow(sample['obsvariable'][s,:,:])
-            axs1[s].set_title(str(self.signals[s]))
-            axs1[s].set_xticks([])
-            axs1[s].set_yticks([])
-        plt.tight_layout()
- 
-        fig2, axs2 = plt.subplots(1,len(labels[self.country]))
-        for w in range(len(labels[self.country])): 
-            axs2[w].imshow(sample['groundtruth'][w,:,:])
-            axs2[w].set_title(labels[self.country][w])
-            axs2[w].set_xticks([])
-            axs2[w].set_yticks([])
-        plt.tight_layout()
+# %% lognorm fit
+lognorm_dist_list = fitlognorm(groundtruth_path=
+                               '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/')
 # %%
 train_ds = OpenSendaiBenchDataset(      obsvariables_path="/obsvariables/", 
                                         groundtruth_path="/groundtruth/", 
