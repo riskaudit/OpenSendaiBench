@@ -15,7 +15,9 @@ class OpenSendaiBenchDataset(Dataset):
     An implementation of a PyTorch dataset for loading pairs of observable variables and ground truth labels.
     Inspired by https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
     """
-    def __init__(self, obsvariables_path: str, groundtruth_path: str, country: str, signal: list, lognorm_dist: dict, transform: transforms = None):
+    def __init__(self, 
+                 obsvariables_path: str, groundtruth_path: str, 
+                 ifile: list, country: str, signal: list, lognorm_dist: dict, transform: transforms = None):
         """
         Constructs an OpenSendaiBenchDataset.
         :param obsvariables_path: Path to the source folder of observable variables
@@ -24,6 +26,7 @@ class OpenSendaiBenchDataset(Dataset):
         """
         self.obsvariables_path = obsvariables_path
         self.groundtruth_path = groundtruth_path
+        self.ifile = ifile
         self.country = country
         self.signal = signal
         self.transform = transform
@@ -35,7 +38,7 @@ class OpenSendaiBenchDataset(Dataset):
         When training/testing, this method tells our training loop how much longer we have to go in our Dataset.
         :return: Length of OpenSendaiBenchDataset
         """
-        return 100 #len(self.groundtruth_files)/labels[self.country]
+        return len(self.ifile)
 
     def __getitem__(self, i: int):
         """
@@ -44,12 +47,12 @@ class OpenSendaiBenchDataset(Dataset):
         :param i: Index of which image pair to fetch
         :return: Dictionary with pairs of observable variables and ground truth labels.
         """
-
+        k = self.ifile[i]
         obsvariable = np.zeros([len(self.signal),368,368])
         for s in range(len(self.signal)):
             for file in glob.glob(str(os.getcwd()+self.obsvariables_path+
                                     '**/'+self.country+'_*/'+self.country+'_'+
-                                    str(i)+'_'+'of_*/2019*_'+self.signal[s]+'.tif')):
+                                    str(k)+'_'+'of_*/2019*_'+self.signal[s]+'.tif')):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
                 a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
                 obsvariable[s,:,:] = a.reshape(1,a.shape[0],a.shape[1])
@@ -58,7 +61,7 @@ class OpenSendaiBenchDataset(Dataset):
         for w in range(len(labels[self.country])): 
             for file in glob.glob(str(os.getcwd()+self.groundtruth_path+
                                       self.country+'*/tiles/images/'+
-                                      self.country+'_nbldg_'+labels[self.country][w]+'_'+str(i)+'_'+'of_'+'*.tif')):
+                                      self.country+'_nbldg_'+labels[self.country][w]+'_'+str(k)+'_'+'of_'+'*.tif')):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
                 groundtruth[w,:,:] = self.lognorm_dist[labels[self.country][w]]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1]))
 
@@ -78,7 +81,8 @@ class OpenSendaiBenchDataset(Dataset):
         :param i: Index of which image pair to visualise
         :return: None
         """
-        sample = self[i]
+        k = self.ifile[i]
+        sample = self[k]
         fig1, axs1 = plt.subplots(1,len(self.signal))
         for s in range(len(self.signal)):
             axs1[s].imshow(sample['obsvariable'][s,:,:])

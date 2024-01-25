@@ -23,17 +23,23 @@ lognorm_dist_list = fitlognorm(groundtruth_path=
                                '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/')
 
 # %% national or country-level
+idx = np.random.RandomState(seed=821).permutation(100)+1
+iTrain, iTest, iValid = idx[:80], idx[80:90], idx[90:]
+
 for icountry in range(len(list(labels.keys()))):
     country = list(labels.keys())[icountry]
-    train_ds = OpenSendaiBenchDataset(  obsvariables_path=
-                                        '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
-                                        groundtruth_path=
-                                        '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/',
-                                        country=country, 
-                                        signal = signals[country],
-                                        lognorm_dist = lognorm_dist_list[country])
-    print(train_ds[1]['groundtruth'].shape)
-    print(train_ds[1]['obsvariable'].shape)
+
+    if not ntiles[country] != 100:
+        train_ds = OpenSendaiBenchDataset(  obsvariables_path = 
+                                            '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
+                                            groundtruth_path = 
+                                            '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/',
+                                            ifile = iTrain,
+                                            country = country, 
+                                            signal = signals[country],
+                                            lognorm_dist = lognorm_dist_list[country])
+        print(train_ds[1]['groundtruth'].shape)
+        print(train_ds[1]['obsvariable'].shape)
 # %%
 train_dl = DataLoader(train_ds, batch_size=10, shuffle=True)
 len(train_dl)
