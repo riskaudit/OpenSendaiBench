@@ -1,175 +1,180 @@
-"""
-AI4ER GTC - Sea Ice Classification
-Script for feeding training and validation data into 
-unet or resnet34 model and saving the model output to wandb
-"""
-# %%
-import pandas as pd
-import matplotlib
+# %% import packages
+from constants import labels, signals, ntiles
+from util import OpenSendaiBenchDataset, fitlognorm
+from model import ModifiedResNet50
+
+import matplotlib.pyplot as plt
+from datetime import datetime
+import numpy as np
+import scipy
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.optim import lr_scheduler
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms, models
+from torchsummary import summary
+
 import pytorch_lightning as pl
-import wandb
-from argparse import ArgumentParser
-from torch import nn
-from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pathlib import Path
+device = torch.device("mps")
+# %% lognorm fit - can be integrated inside the for-loop (for next step)
+lognorm_dist_list = fitlognorm(groundtruth_path=
+                               '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/')
+# %% national or country-level
+idx = np.random.RandomState(seed=821).permutation(100)+1
+iTrain, iTest, iValid = idx[:80], idx[80:90], idx[90:]
 # %%
-from constants import new_classes
-from util import SeaIceDataset, Visualise
-from model import Segmentation, UNet
+for icountry in range(len(list(labels.keys()))):
+    country = list(labels.keys())[icountry]
+    if not ntiles[country] != 100:
+        train_ds = OpenSendaiBenchDataset(  obsvariables_path = 
+                                            '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
+                                            groundtruth_path = 
+                                            '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/',
+                                            ifile = iTrain,
+                                            country = country, 
+                                            signal = signals[country],
+                                            lognorm_dist = lognorm_dist_list[country])
+        test_ds  = OpenSendaiBenchDataset(  obsvariables_path = 
+                                            '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
+                                            groundtruth_path = 
+                                            '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/',
+                                            ifile = iTest,
+                                            country = country, 
+                                            signal = signals[country],
+                                            lognorm_dist = lognorm_dist_list[country])
+        valid_ds = OpenSendaiBenchDataset(  obsvariables_path = 
+                                            '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
+                                            groundtruth_path = 
+                                            '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/',
+                                            ifile = iValid,
+                                            country = country, 
+                                            signal = signals[country],
+                                            lognorm_dist = lognorm_dist_list[country])
+        train_dl = DataLoader(train_ds, batch_size=10, shuffle=True)
+        test_dl  = DataLoader(test_ds)
+        valid_dl = DataLoader(valid_ds)
+        # %% model
+        # model = models.resnet50(weights='ResNet50_Weights.DEFAULT').to(device)
+        # model.conv1 = nn.Conv2d(len(signals[country]),64, kernel_size = (7,7), stride = (2,2), padding = (3,3), bias = False).to(device)
+        # model.avgpool = nn.AdaptiveAvgPool3d(output_size=(len(labels[country]), 8, 8)).to(device)
+        # model.fc = nn.Identity().to(device)
+        # %%
+        loss_func = nn.L1Loss()
+        iterator = iter(train_dl)
+
+        for batch_idx in range(len(train_dl)):
+            data_batch = next(iterator)
+            xb = data_batch['obsvariable'].type(torch.float).to(device)
+            print(xb.shape)
+            yb = data_batch['groundtruth'].type(torch.float).to(device)
+            # out = (torch.reshape(torch.sigmoid(model(xb)),
+            #                         (train_dl.batch_size,len(labels[country]),8,8)).to(device)-0.5)/0.5
+            out = ModifiedResNet50(country)(xb)
+            print(out.shape)
+            loss = loss_func(out, yb)
+            print(loss)
+            print(loss.item())
+            break
+
+        # %%
+        loss.backward()
+        # %%
+        opt = optim.Adam(model.parameters(), lr=1e-4)
+        opt.step()
+        opt.zero_grad()
 # %%
-import segmentation_models_pytorch as smp
+class RMSELoss(nn.Module):
+    def __init__(self, eps=1e-6):
+        super().__init__()
+        self.mse = nn.MSELoss()
+        self.eps = eps
+    def forward(self,yhat,y):
+        loss = torch.sqrt(self.mse(yhat,y) + self.eps)
+        return loss
+rmse = RMSELoss()
+def metrics_batch(target, output):
+    return rmse(output,target)
+def loss_batch(loss_func, xb, yb,yb_h, opt=None):
+    loss = loss_func(yb_h, yb)
+    metric_b = metrics_batch(yb,yb_h)
+    if opt is not None:
+        loss.backward()
+        opt.step()
+        opt.zero_grad()
+    return loss.item(), metric_b
+def loss_epoch(model,loss_func,dataset_dl,opt=None):
+    loss=0.0
+    metric=0.0
+    iterator = iter(train_dl)
+    len_data = len(train_dl.dataset)
+    for batch_idx in range(len(train_dl)):
+        data_batch = next(iterator)
+        xb = data_batch['obsvariable'].type(torch.float).to(device)
+        yb = data_batch['groundtruth'].type(torch.float).to(device)
+        yb_h = (torch.reshape(torch.sigmoid(model(xb)),
+                              (10,1,8,8)).to(device)-0.5)/0.5
+        loss_b,metric_b=loss_batch(loss_func, xb, yb,yb_h, opt)
+        loss+=loss_b
+        if metric_b is not None:
+            metric+=metric_b
+    loss/=len_data
+    metric/=len_data
+    return loss, metric
+def train_val(epochs, model, loss_func, opt, train_dl, val_dl):
+    for epoch in range(epochs):
+        model.train()
+        train_loss, train_metric=loss_epoch(model,loss_func,train_dl,opt)
+        model.eval()
+        with torch.no_grad():
+            val_loss, val_metric=loss_epoch(model,loss_func,val_dl)
+        accuracy=val_metric #100*val_metric
+        print("epoch: %d, train loss: %.6f, val loss: %.6f, rmse: %.6f" %(epoch, train_loss,val_loss,accuracy))
 # %%
+model.train()
+num_epochs=25
+train_val(num_epochs, model, loss_func, opt, train_dl, val_dl=train_dl)
+# %%
+path2weights=str("./models/weights_"
+                 +datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
+                 +"_epoch_"+str(num_epochs)+".pt")
+torch.save(model.state_dict(), path2weights)
+# %%
+_model = model #UNet(n_class=len(labels['AFG']))
+weights=torch.load(path2weights)
+_model.load_state_dict(weights)
+_model.eval()
+_model.to(device)
+# %%
+lognorm_dist = scipy.stats.lognorm(s=sigma, loc=0, scale=np.exp(mu))
+lognorm_dist.ppf
+# %%
+batch = next(iter(train_dl))
 
-if __name__ == '__main__':
+xb = batch['obsvariable'].type(torch.float).to(device)
+yb = batch['groundtruth'].type(torch.float).to(device)
+yb_h = (torch.reshape(torch.sigmoid(_model(xb)), (10,1,8,8)).to(device)-0.5)/0.5
 
-    # parse command line arguments
-    parser = ArgumentParser(description="OpenSendaiBench")
-    parser.add_argument("--name", default="default", type=str, help="Name of wandb run")
-    parser.add_argument("--model", default="unet", type=str,
-                        help="Either 'unet' or smp decoder 'resnet34'"
-                             "see https://segmentation-modelspytorch.readthedocs.io/en/latest", required=False)
-    parser.add_argument("--criterion", default="ce", type=str, choices=["ce", "dice", "focal"],
-                        help="Loss to train with", required=False)
-    parser.add_argument("--classification_type", default="binary", type=str,
-                        choices=["binary", "ternary", "multiclass"], help="Type of classification task")
-    parser.add_argument("--sar_band3", default="angle", type=str, choices=["angle", "ratio"],
-                        help="Whether to use incidence angle or HH/HV ratio in third band")
-    parser.add_argument("--user_overfit", default="False", type=str, choices=["True", "Semi", "False"],
-                        help="Whether or not to overfit on a single image")
-    parser.add_argument("--user_overfit_batches", default=5, type=int,
-                        help="How many batches to run per epoch when overfitting")
-    parser.add_argument("--accelerator", default="auto", type=str, help="PytorchLightning training accelerator")
-    parser.add_argument("--devices", default=1, type=int, help="PytorchLightning number of devices to run on")
-    parser.add_argument("--n_workers", default=1, type=int, help="Number of workers in dataloader")
-    parser.add_argument("--n_filters", default=16, type=int,
-                        help="Number of convolutional filters in hidden layer if model==unet")
-    parser.add_argument("--learning_rate", default=1e-3, type=float, help="Learning rate")
-    parser.add_argument("--batch_size", default=256, type=int, help="Batch size")
-    parser.add_argument("--seed", default=0, type=int, help="Numpy random seed")
-    parser.add_argument("--precision", default=32, type=int, help="Precision for training. Options are 32 or 16")
-    parser.add_argument("--log_every_n_steps", default=10, type=int, help="How often to log during training")
-    parser.add_argument("--encoder_depth", default=5, type=int,
-                        help="Number of decoder stages for smp models (increases number of features)")
-    parser.add_argument("--max_epochs", default=100, type=int, help="Number of epochs to fine-tune")
-    parser.add_argument("--num_sanity_val_steps", default=2, type=int, help="Number of batches to sanity check before training")
-    parser.add_argument("--limit_train_batches", default=1.0, type=float, help="Proportion of training dataset to use")
-    parser.add_argument("--limit_val_batches", default=1.0, type=float, help="Proportion of validation dataset to use")
-    parser.add_argument("--tile_info_base", default="tile_info_13032023T164009",
-                        type=str, help="Tile info csv to load images for visualisation")
-    parser.add_argument("--n_to_visualise", default=3, type=int, help="How many tiles per category to visualise")
-    args = parser.parse_args()
+###
+fig, axs = plt.subplots(nrows=1,ncols=2,layout='compressed')
+f = axs[0].imshow(yb[0,0,:,:].cpu().detach().numpy(),
+                  cmap='viridis', vmin=0, vmax=1)
+axs[0].set_title('Groundtruth, cdf')
+f = axs[1].imshow(yb_h[0,0,:,:].cpu().detach().numpy(),
+                  cmap='viridis', vmin=0, vmax=1)
+axs[1].set_title('Estimated, cdf')
+cbar = fig.colorbar(f, shrink=0.95)
 
-    # standard input dirs
-    tile_folder = open("tile.config").read().strip()
-    chart_folder = f"{tile_folder}/chart"
-    sar_folder = f"{tile_folder}/sar"
-
-    # get file lists
-    if args.user_overfit == "True":  # load single train/val file and overfit
-        train_files = ["WS_20180104_02387_[3840,4352]_256x256.tiff"] * args.batch_size * args.user_overfit_batches
-        val_files = ["WS_20180104_02387_[3840,4352]_256x256.tiff"] * args.batch_size * 2
-    elif args.user_overfit == "Semi":  # load a few interesting train/val pairs
-        df = pd.read_csv("interesting_images.csv")[:5]
-        files = []
-        for i, row in df.iterrows():
-            files.append(f"{row['region']}_{row['basename']}_{row['file_n']:05}_[{row['col']},{row['row']}]_{row['size']}x{row['size']}.tiff")
-        train_files = files * args.batch_size * (args.user_overfit_batches // 5)
-        val_files = files
-    else:  # load full sets of train/val files from pre-determined lists
-        with open(Path(f"{tile_folder}/train_files.txt"), "r") as f:
-            train_files = f.read().splitlines()
-        with open(Path(f"{tile_folder}/val_files.txt"), "r") as f:
-            val_files = f.read().splitlines()
-    print(f"Length of train file list {len(train_files)}.")
-    print(f"Length of val file list {len(val_files)}.")
-
-    # get visualisation file lists
-    dfs = {
-        "low": pd.read_csv(f"{tile_folder}/{args.tile_info_base}_low.csv", index_col=0)[:args.n_to_visualise],
-        "mid": pd.read_csv(f"{tile_folder}/{args.tile_info_base}_mid.csv", index_col=0)[:args.n_to_visualise],
-        "high": pd.read_csv(f"{tile_folder}/{args.tile_info_base}_high.csv", index_col=0)[:args.n_to_visualise],
-        "low_mid": pd.read_csv(f"{tile_folder}/{args.tile_info_base}_low_mid.csv", index_col=0)[:args.n_to_visualise],
-        "mid_high": pd.read_csv(f"{tile_folder}/{args.tile_info_base}_mid_high.csv", index_col=0)[:args.n_to_visualise],
-        "low_high": pd.read_csv(f"{tile_folder}/{args.tile_info_base}_low_high.csv", index_col=0)[:args.n_to_visualise],
-        "three": pd.read_csv(f"{tile_folder}/{args.tile_info_base}_three.csv", index_col=0)[:args.n_to_visualise]
-    }
-    val_vis_files = []
-    for df in dfs.values():
-        if len(df) > 0:
-            val_vis_files.extend(df["filename"].to_list())
-    print(f"Length of validation vis file list {len(val_vis_files)}.")
-
-    # init
-    pl.seed_everything(args.seed)
-    class_categories = new_classes[args.classification_type]
-    n_classes = len(class_categories)
-
-    # load training data
-    train_sar_files = [f"SAR_{f}" for f in train_files]
-    train_chart_files = [f"CHART_{f}" for f in train_files]
-    train_dataset = SeaIceDataset(sar_path=sar_folder, sar_files=train_sar_files,
-                                  chart_path=chart_folder, chart_files=train_chart_files,
-                                  class_categories=class_categories, sar_band3=args.sar_band3)
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.n_workers, persistent_workers=True)
-
-    # load validation data
-    val_sar_files = [f"SAR_{f}" for f in val_files]
-    val_chart_files = [f"CHART_{f}" for f in val_files]
-    val_dataset = SeaIceDataset(sar_path=sar_folder, sar_files=val_sar_files,
-                                chart_path=chart_folder, chart_files=val_chart_files,
-                                class_categories=class_categories, sar_band3=args.sar_band3)
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.n_workers, persistent_workers=True)
-
-    # load validation vis data
-    val_vis_sar_files = [f"SAR_{f}" for f in val_vis_files]
-    val_vis_chart_files = [f"CHART_{f}" for f in val_vis_files]
-    val_vis_dataset = SeaIceDataset(sar_path=sar_folder, sar_files=val_vis_sar_files,
-                                    chart_path=chart_folder, chart_files=val_vis_chart_files,
-                                    class_categories=class_categories, sar_band3=args.sar_band3)
-    val_vis_dataloader = DataLoader(val_vis_dataset, batch_size=args.batch_size, num_workers=args.n_workers, persistent_workers=True)
-
-    # configure model
-    if args.model == "unet":
-        model = UNet(kernel=3, n_channels=3, n_filters=args.n_filters, n_classes=n_classes)
-    else:  # assume unet encoder from segmentation_models_pytorch (see smp documentation for valid strings)
-        decoder_channels = [2 ** (i + 4) for i in range(args.encoder_depth)][::-1]  # eg [64,32,16] for encoder_depth=3
-        model = smp.Unet(args.model, encoder_weights="imagenet",
-                         encoder_depth=args.encoder_depth,
-                         decoder_channels=decoder_channels,
-                         in_channels=3, classes=n_classes)
-
-    # configure loss
-    if args.criterion == "ce":
-        criterion = nn.CrossEntropyLoss()
-    elif args.criterion == "dice":
-        criterion = smp.losses.DiceLoss(mode="multiclass")
-    elif args.criterion == "focal":
-        criterion = smp.losses.FocalLoss(mode="multiclass")
-    else:
-        raise ValueError(f"Invalid loss function: {args.criterion}.")
-
-    # configure PyTorch Lightning module
-    segmenter = Segmentation(model, n_classes, criterion, args.learning_rate)
-
-    # set up wandb logging
-    wandb.init(project="sea-ice-classification")
-    if args.name != "default":
-        wandb.run.name = args.name
-    wandb_logger = pl.loggers.WandbLogger(project="sea-ice-classification")
-    wandb_logger.experiment.config.update(args)
-
-    # turn off gradient logging to enable gpu parallelisation (wandb cannot parallelise when tracking gradients)
-    # wandb_logger.watch(model, log="all", log_freq=10)
-
-    # set up trainer configuration
-    trainer = pl.Trainer.from_argparse_args(args)
-    trainer.logger = wandb_logger
-    trainer.callbacks.append(ModelCheckpoint(monitor="val_loss"))
-    trainer.callbacks.append(Visualise(val_vis_dataloader, len(val_vis_files), args.classification_type))
-
-    # train model
-    print(f"Training {len(train_dataset)} examples / {len(train_dataloader)} batches (batch size {args.batch_size}).")
-    print(f"Validating {len(val_dataset)} examples / {len(val_dataloader)} batches (batch size {args.batch_size}).")
-    print(f"All arguments: {args}")
-    trainer.fit(segmenter, train_dataloader, val_dataloader)
+###
+max_value = max(lognorm_dist.ppf(yb[0,0,:,:].cpu().detach().numpy()).max(),
+                lognorm_dist.ppf(yb_h[0,0,:,:].cpu().detach().numpy()).max())
+fig1, axs1 = plt.subplots(nrows=1,ncols=2,layout='compressed')
+f1 = axs1[0].imshow(lognorm_dist.ppf(yb[0,0,:,:].cpu().detach().numpy()),
+                  cmap='viridis', vmin=0, vmax=max_value)
+axs1[0].set_title('Groundtruth, nbldg')
+f1 = axs1[1].imshow(lognorm_dist.ppf(yb_h[0,0,:,:].cpu().detach().numpy()),
+                  cmap='viridis', vmin=0, vmax=max_value)
+axs1[1].set_title('Estimated, nbldg')
+axs1 = fig.colorbar(f1, shrink=0.95)
