@@ -23,8 +23,10 @@ idx = np.random.RandomState(seed=821).permutation(100)+1
 iTrain, iTest, iValid = idx[:80], idx[80:90], idx[90:]
 # %%
 for icountry in range(len(list(labels.keys()))):
+# %%
     country = list(labels.keys())[icountry]
     if not ntiles[country] != 100:
+        # %%
         train_ds = OpenSendaiBenchDataset(  obsvariables_path = 
                                             '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
                                             groundtruth_path = 
@@ -136,38 +138,71 @@ for icountry in range(len(list(labels.keys()))):
         xb = batch['obsvariable'].type(torch.float).to(device)
         yb = batch['groundtruth'].type(torch.float).to(device)
         yb_h = _model(xb)
+        t = 0
 
         ### cdf charts
         fig, axs = plt.subplots(nrows=2,
-                                ncols=len(lognorm_dist_list[country]),layout='compressed')
-        for i in range(len(lognorm_dist_list[country])):
+                                ncols=len(lognorm_dist_list[country]),layout='compressed',
+                                figsize=(10,5))
+        for w in range(len(labels[country])): 
 
             # ground truth
-            f = axs[0,i].imshow(yb[0,i,:,:].cpu().detach().numpy(),
+            f = axs[0,w].imshow(yb[t,w,:,:].cpu().detach().numpy(),
                         cmap='viridis', vmin=0, vmax=1)
-            axs[0,i].set_title(str('GT - ' + 
-                                   str(list(lognorm_dist_list[country].keys())[i])))
+            axs[0,w].set_title(str('Groundtruth - ' + 
+                                   str(list(lognorm_dist_list[country].keys())[w])))
 
             # model prediction
-            f1 = axs[1,i].imshow(yb_h[0,i,:,:].cpu().detach().numpy(),
+            f1 = axs[1,w].imshow(yb_h[t,w,:,:].cpu().detach().numpy(),
                         cmap='viridis', vmin=0, vmax=1)
-            axs[1,i].set_title(str('ES - ' + 
-                                   str(list(lognorm_dist_list[country].keys())[i])))
+            axs[1,w].set_title(str('Estimated - ' + 
+                                   str(list(lognorm_dist_list[country].keys())[w])))
 
         plt.setp(plt.gcf().get_axes(), xticks=[], yticks=[])
         cbar = fig.colorbar(f, shrink=0.95)
         cbar = fig.colorbar(f1, shrink=0.95)
+        fig.savefig(str('multibldgtype_cdf_'+country+'.png'),
+                    bbox_inches='tight')
 
+        ### nbldg charts
+        # get the max first - for cbar use
+        max_value = []
+        for w in range(len(labels[country])): 
+            gt_max = lognorm_dist[labels[country][w]]['modelfit'].ppf(yb[t,w,:,:].cpu().detach().numpy()).round().max()
+            es_max = lognorm_dist[labels[country][w]]['modelfit'].ppf(yb_h[t,w,:,:].cpu().detach().numpy()).round().max()
+            max_value.append(max(gt_max, es_max))
 
-        ###
-        # max_value = max(lognorm_dist.ppf(yb[0,0,:,:].cpu().detach().numpy()).max(),
-        #                 lognorm_dist.ppf(yb_h[0,0,:,:].cpu().detach().numpy()).max())
-        # fig1, axs1 = plt.subplots(nrows=1,ncols=2,layout='compressed')
-        # f1 = axs1[0].imshow(lognorm_dist.ppf(yb[0,0,:,:].cpu().detach().numpy()),
-        #                 cmap='viridis', vmin=0, vmax=max_value)
-        # axs1[0].set_title('Groundtruth, nbldg')
-        # f1 = axs1[1].imshow(lognorm_dist.ppf(yb_h[0,0,:,:].cpu().detach().numpy()),
-        #                 cmap='viridis', vmin=0, vmax=max_value)
-        # axs1[1].set_title('Estimated, nbldg')
-        # axs1 = fig.colorbar(f1, shrink=0.95)
+        # create the plot 
+        fig1, axs = plt.subplots(nrows=2,
+                                ncols=len(lognorm_dist_list[country]),layout='compressed',
+                                figsize=(15, 5))
+        for w in range(len(labels[country])): 
+
+            # ground truth
+            f = axs[0,w].imshow(lognorm_dist[labels[country][w]]['modelfit'].ppf(yb[t,w,:,:].cpu().detach().numpy()).round(), cmap='viridis', vmin=0, vmax=max_value[w])
+            axs[0,w].set_title(str('Groundtruth - ' + 
+                                   str(list(lognorm_dist_list[country].keys())[w])))
+            axs[0,w].set_yticklabels([])
+            axs[0,w].set_xticklabels([])
+            axs[0,w].set_xticks([])
+            axs[0,w].set_yticks([])
+            cbar = fig1.colorbar(f, ax=axs[0,w], 
+                                 ticks=[0, max_value[w]],
+                                 orientation="horizontal", shrink=0.95)
+
+            # model prediction
+            f1 = axs[1,w].imshow(lognorm_dist[labels[country][w]]['modelfit'].ppf(yb_h[t,w,:,:].cpu().detach().numpy()).round(), cmap='viridis', vmin=0, vmax=max_value[w])
+            axs[1,w].set_title(str('Estimated - ' + 
+                                   str(list(lognorm_dist_list[country].keys())[w])))
+            axs[1,w].set_yticklabels([])
+            axs[1,w].set_xticklabels([])
+            axs[1,w].set_xticks([])
+            axs[1,w].set_yticks([])
+            cbar = fig1.colorbar(f1, ax=axs[1,w], 
+                                 ticks=[0, max_value[w]],
+                                 orientation="horizontal", shrink=0.95)
+            
+        fig1.savefig(str('multibldgtype_nbldg_'+country+'.png'),
+                     bbox_inches='tight')
+
 # %%
