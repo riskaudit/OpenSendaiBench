@@ -1,7 +1,7 @@
 # %% import packages
 from constants import labels, signals, ntiles
 from util import OpenSendaiBenchDataset, fitlognorm
-from model import ModifiedResNet50, Segmentation
+from model import ModifiedResNet50
 
 from datetime import datetime
 import numpy as np
