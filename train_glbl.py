@@ -161,7 +161,6 @@ for i in range(len(bldgtype_list)):
     _model.to(device)
     # %%
     import matplotlib.pyplot as plt
-    lognorm_dist = lognorm_dist_list[country]
     # %%
     iterator = iter(test_dl)
     batch = next(iterator)
@@ -169,7 +168,7 @@ for i in range(len(bldgtype_list)):
     yb = batch['groundtruth'].type(torch.float).to(device)
     yb_h = _model(xb)
     t = 0
-
+    # %%
     ### cdf charts
     fig, axs = plt.subplots(nrows=2,
                             ncols=len(lognorm_dist_list[country]),layout='compressed',

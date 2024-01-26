@@ -70,7 +70,8 @@ class OpenSendaiBenchDataset(Dataset):
         # obsvariable_8x8 = torch.from_numpy(obsvariable_8x8).float()
         groundtruth = torch.from_numpy(groundtruth).float() #.unsqueeze(0)
     
-        sample = {"obsvariable": obsvariable, "groundtruth": groundtruth}
+        sample = {"obsvariable": obsvariable,
+                  "groundtruth": groundtruth}
         if self.transform:
             sample = {"obsvariable": self.transform(obsvariable),
                       "groundtruth": self.transform(groundtruth).squeeze(0).long()}
@@ -164,7 +165,9 @@ class OpenSendaiBenchDatasetGlobal(Dataset):
         obsvariable = torch.from_numpy(obsvariable).float() 
         groundtruth = torch.from_numpy(groundtruth).float() 
     
-        sample = {"obsvariable": obsvariable, "groundtruth": groundtruth}
+        sample = {"obsvariable": obsvariable, 
+                  "groundtruth": groundtruth,
+                  "lognorm_dist": self.lognorm_dist_list[country][self.bldgtype]['modelfit']}
         if self.transform:
             sample = {"obsvariable": self.transform(obsvariable),
                       "groundtruth": self.transform(groundtruth).squeeze(0).long()}
