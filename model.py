@@ -14,10 +14,9 @@ class RMSELoss(nn.Module):
         return loss
     
 class ModifiedResNet50(nn.Module):
-    def __init__(self, country: str, inC: int, outC: int):
+    def __init__(self, inC: int, outC: int):
         super(ModifiedResNet50, self).__init__()
 
-        self.country = country
         self.inC = inC
         self.outC = outC
 
