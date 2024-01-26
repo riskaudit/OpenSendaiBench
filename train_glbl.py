@@ -43,6 +43,7 @@ ratio_val = 0.1
 ratio_test = 0.1
 # %%
 for i in range(len(bldgtype_list)):
+    # %%
     bldgtype = bldgtype_list[i]
 
     TrainFile = []
