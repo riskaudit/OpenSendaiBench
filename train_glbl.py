@@ -23,7 +23,7 @@ idx = np.random.RandomState(seed=821).permutation(100)+1
 iTrain, iTest, iValid = idx[:80], idx[80:90], idx[90:]
 # %%
 for icountry in range(len(list(labels.keys()))):
-    # %%
+# %%
     country = list(labels.keys())[icountry]
     if not ntiles[country] != 100:
         # %%
@@ -89,8 +89,8 @@ for icountry in range(len(list(labels.keys()))):
         def loss_epoch(model,loss_func,dataset_dl,opt=None):
             loss=0.0
             metric=0.0
-            iterator = iter(dataset_dl)
-            len_data = len(dataset_dl.dataset)
+            iterator = iter(train_dl)
+            len_data = len(train_dl.dataset)
             for batch_idx in range(len(train_dl)):
                 data_batch = next(iterator)
                 xb = data_batch['obsvariable'].type(torch.float).to(device)
@@ -115,7 +115,7 @@ for icountry in range(len(list(labels.keys()))):
                 print("epoch: %d, train loss: %.10f, val loss: %.10f, rmse: %.6f" %(epoch, train_loss,val_loss,accuracy))
         # %%
         model.train()
-        num_epochs = 500
+        num_epochs = 100
         train_val(num_epochs,  model.to(device), loss_func, 
                   opt, train_dl, val_dl=valid_dl)
         # %%
@@ -134,7 +134,6 @@ for icountry in range(len(list(labels.keys()))):
         lognorm_dist = lognorm_dist_list[country]
         # %%
         iterator = iter(test_dl)
-        # %%
         batch = next(iterator)
         xb = batch['obsvariable'].type(torch.float).to(device)
         yb = batch['groundtruth'].type(torch.float).to(device)
