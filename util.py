@@ -1,4 +1,5 @@
 import os
+import re
 import glob
 import cv2
 import scipy
@@ -98,6 +99,76 @@ class OpenSendaiBenchDataset(Dataset):
             axs2[w].set_xticks([])
             axs2[w].set_yticks([])
         plt.tight_layout()
+
+class OpenSendaiBenchDatasetGlobal(Dataset):
+    """
+    An implementation of a PyTorch dataset for loading pairs of observable variables and ground truth labels.
+    Inspired by https://pytorch.org/tutorials/beginner/data_loading_tutorial.html.
+    """
+    def __init__(self, 
+                 obsvariables_path: str, 
+                 FilePathList: list, 
+                 bldgtype: str,
+                 lognorm_dist_list: dict, 
+                 transform: transforms = None):
+        """
+        Constructs an OpenSendaiBenchDataset.
+        :param obsvariables_path: Path to the source folder of observable variables
+        :param groundtruth_path: Path to the source folder of corresponding ground truth labels
+        :param transform: Callable transformation to apply to images upon loading
+        """
+        self.obsvariables_path = obsvariables_path
+        self.FilePathList = FilePathList
+        self.bldgtype = bldgtype
+        self.lognorm_dist_list = lognorm_dist_list
+        self.transform = transform
+        self.signal = ['VH', 'VV', 'aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2']
+
+    def __len__(self):
+        """
+        Implements the len(SeaIceDataset) magic method. Required to implement by Dataset superclass.
+        When training/testing, this method tells our training loop how much longer we have to go in our Dataset.
+        :return: Length of OpenSendaiBenchDataset
+        """
+        return len(self.FilePathList)
+
+    def __getitem__(self, i: int):
+        """
+        Implements the OpenSendaiBenchDataset[i] magic method. Required to implement by Dataset superclass.
+        When training/testing, this method is used to actually fetch data.
+        :param i: Index of which image pair to fetch
+        :return: Dictionary with pairs of observable variables and ground truth labels.
+        """
+        file = self.FilePathList[i]
+        
+        start = file.find('2002/') + 5
+        end = file.find('_oed_exposure', start)
+        country = file[start:end]
+
+        start = file.find(str('_'+self.bldgtype+'_')) + 2 + len(self.bldgtype)
+        end = file.find('_of_', start)
+        k = file[start:end]
+
+        obsvariable = np.zeros([len(self.signal),368,368])
+        for s in range(len(self.signal)):
+            for file in glob.glob(str(self.obsvariables_path+
+                                    '**/'+country+'_*/'+country+'_'+
+                                    str(k)+'_'+'of_*/2019*_'+self.signal[s]+'.tif')):
+                a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
+                a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
+                obsvariable[s,:,:] = a.reshape(1,a.shape[0],a.shape[1])
+                
+        a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
+        groundtruth = self.lognorm_dist_list[country][self.bldgtype]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1]))
+
+        obsvariable = torch.from_numpy(obsvariable).float() 
+        groundtruth = torch.from_numpy(groundtruth).float() 
+    
+        sample = {"obsvariable": obsvariable, "groundtruth": groundtruth}
+        if self.transform:
+            sample = {"obsvariable": self.transform(obsvariable),
+                      "groundtruth": self.transform(groundtruth).squeeze(0).long()}
+        return sample
 
 def fitlognorm(groundtruth_path: str):
     lognorm_dist_list = {}
