@@ -167,10 +167,9 @@ class OpenSendaiBenchDatasetGlobal(Dataset):
     
         sample = {"obsvariable": obsvariable, 
                   "groundtruth": groundtruth,
-                  "lognorm_dist": self.lognorm_dist_list[country][self.bldgtype]}
-        if self.transform:
-            sample = {"obsvariable": self.transform(obsvariable),
-                      "groundtruth": self.transform(groundtruth).squeeze(0).long()}
+                  "mu": self.lognorm_dist_list[country][self.bldgtype]['mu'],
+                  "sigma": self.lognorm_dist_list[country][self.bldgtype]['sigma']}
+
         return sample
 
 def fitlognorm(groundtruth_path: str):
