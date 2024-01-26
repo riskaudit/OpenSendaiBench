@@ -106,7 +106,7 @@ def fitlognorm(groundtruth_path: str):
     for icountry in range(len(list(labels.keys()))):
         country = list(labels.keys())[icountry]
         datapath = groundtruth_path+str(country)+'_oed_exposure_20200811/'
-        f, ax = plt.subplots(ncols=1, nrows=len(labels[country]), figsize=(7, 5*len(labels[country])))
+        # f, ax = plt.subplots(ncols=1, nrows=len(labels[country]), figsize=(7, 5*len(labels[country])))
         
         lognorm_dist_list[country] = {}
         # get the lognormal fitting parameters for each building type
@@ -136,15 +136,15 @@ def fitlognorm(groundtruth_path: str):
             lognorm_dist_list[country][labels[country][ibldgtype]]['KStest_stat'] = lognormal_test.statistic
             lognorm_dist_list[country][labels[country][ibldgtype]]['KStest_pvalue'] = lognormal_test.pvalue
 
-            sns.distplot(x_exp, ax=ax[ibldgtype], norm_hist=True, kde=False,
-                        label='Data')
-            ax[ibldgtype].plot(t, lognorm_dist_fitted.pdf(t), lw=2, color='r',
-                    label='Fitted Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist_fitted.mean(), lognorm_dist_fitted.std()))
-            ax[ibldgtype].plot(t, lognorm_dist.pdf(t), lw=2, color='g', ls=':',
-                    label='Original Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist.mean(), lognorm_dist.std()))
-            ax[ibldgtype].title.set_text(str(labels[country][ibldgtype]))
-            ax[ibldgtype].legend(loc='upper right')
+        #     sns.distplot(x_exp, ax=ax[ibldgtype], norm_hist=True, kde=False,
+        #                 label='Data')
+        #     ax[ibldgtype].plot(t, lognorm_dist_fitted.pdf(t), lw=2, color='r',
+        #             label='Fitted Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist_fitted.mean(), lognorm_dist_fitted.std()))
+        #     ax[ibldgtype].plot(t, lognorm_dist.pdf(t), lw=2, color='g', ls=':',
+        #             label='Original Model X~LogNorm(mu={0:.1f}, sigma={1:.1f})'.format(lognorm_dist.mean(), lognorm_dist.std()))
+        #     ax[ibldgtype].title.set_text(str(labels[country][ibldgtype]))
+        #     ax[ibldgtype].legend(loc='upper right')
 
-        f.savefig('./lognorm/'+str(country)+'.png')
+        # f.savefig('./lognorm/'+str(country)+'.png')
 
     return lognorm_dist_list
