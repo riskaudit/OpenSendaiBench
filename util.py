@@ -157,7 +157,10 @@ class OpenSendaiBenchDatasetGlobal(Dataset):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
                 a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
                 obsvariable[s,:,:] = a.reshape(1,a.shape[0],a.shape[1])
-                
+
+        print(file)
+        print(obsvariable.shape)      
+
         a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
         groundtruth = self.lognorm_dist_list[country][self.bldgtype]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1]))
 

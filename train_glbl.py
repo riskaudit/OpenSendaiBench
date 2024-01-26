@@ -12,7 +12,7 @@
 
 # %% import packages
 from constants import labels, signals, ntiles
-from util import OpenSendaiBenchDataset, OpenSendaiBenchDatasetGlobal, fitlognorm
+from util import OpenSendaiBenchDatasetGlobal, fitlognorm
 from model import ModifiedResNet50
 
 from sklearn.model_selection import train_test_split
