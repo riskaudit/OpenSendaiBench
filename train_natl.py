@@ -57,7 +57,8 @@ for icountry in range(len(list(labels.keys()))):
         # %%
         loss_func = nn.L1Loss()
         iterator = iter(train_dl)
-        model = ModifiedResNet50(country).to(device)
+        # model = ModifiedResNet50(inC= 14, 
+        #                         outC= 1).to(device)
         # %%
         opt = optim.Adam(model.parameters(), lr=1e-4)
         opt.step()

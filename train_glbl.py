@@ -119,8 +119,8 @@ for i in range(len(bldgtype_list)):
     def loss_epoch(model,loss_func,dataset_dl,opt=None):
         loss=0.0
         metric=0.0
-        iterator = iter(train_dl)
-        len_data = len(train_dl.dataset)
+        iterator = iter(dataset_dl)
+        len_data = len(dataset_dl.dataset)
         for batch_idx in range(len(train_dl)):
             data_batch = next(iterator)
             xb = data_batch['obsvariable'].type(torch.float).to(device)
@@ -145,12 +145,12 @@ for i in range(len(bldgtype_list)):
             print("epoch: %d, train loss: %.10f, val loss: %.10f, rmse: %.6f" %(epoch, train_loss,val_loss,accuracy))
     # %%
     model.train()
-    num_epochs = 100
+    num_epochs = 10
     train_val(num_epochs,  model.to(device), loss_func, 
                 opt, train_dl, val_dl=valid_dl)
     # %%
     path2weights=str("./models/weights_"
-                    +datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
+                       +datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
                     +"_epoch_"+str(num_epochs)+".pt")
     torch.save(model.state_dict(), path2weights)
     # %%
