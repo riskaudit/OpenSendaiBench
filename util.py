@@ -139,29 +139,26 @@ class OpenSendaiBenchDatasetGlobal(Dataset):
         :param i: Index of which image pair to fetch
         :return: Dictionary with pairs of observable variables and ground truth labels.
         """
-        file = self.FilePathList[i]
+        file1 = self.FilePathList[i]
         
-        start = file.find('2002/') + 5
-        end = file.find('_oed_exposure', start)
-        country = file[start:end]
+        start = file1.find('2002/') + 5
+        end = file1.find('_oed_exposure', start)
+        country = file1[start:end]
 
-        start = file.find(str('_'+self.bldgtype+'_')) + 2 + len(self.bldgtype)
-        end = file.find('_of_', start)
-        k = file[start:end]
+        start = file1.find(str('_'+self.bldgtype+'_')) + 2 + len(self.bldgtype)
+        end = file1.find('_of_', start)
+        k = file1[start:end]
 
         obsvariable = np.zeros([len(self.signal),368,368])
         for s in range(len(self.signal)):
-            for file in glob.glob(str(self.obsvariables_path+
+            for file2 in glob.glob(str(self.obsvariables_path+
                                     '**/'+country+'_*/'+country+'_'+
                                     str(k)+'_'+'of_*/2019*_'+self.signal[s]+'.tif')):
-                a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
+                a = cv2.imread(file2, cv2.IMREAD_UNCHANGED)
                 a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
                 obsvariable[s,:,:] = a.reshape(1,a.shape[0],a.shape[1])
 
-        print(file)
-        print(obsvariable.shape)      
-
-        a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
+        a = cv2.imread(file1, cv2.IMREAD_UNCHANGED)
         groundtruth = self.lognorm_dist_list[country][self.bldgtype]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1]))
 
         obsvariable = torch.from_numpy(obsvariable).float() 
