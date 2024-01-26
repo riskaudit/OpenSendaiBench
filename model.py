@@ -14,17 +14,21 @@ class RMSELoss(nn.Module):
         return loss
     
 class ModifiedResNet50(nn.Module):
-    def __init__(self, country: str):
+    def __init__(self, country: str, inC: int, outC: int):
         super(ModifiedResNet50, self).__init__()
+
         self.country = country
+        self.inC = inC
+        self.outC = outC
+
         self.model = models.resnet50(weights='ResNet50_Weights.DEFAULT')
-        self.model.conv1 = nn.Conv2d(len(signals[country]),64, kernel_size = (7,7), stride = (2,2), padding = (3,3), bias = False)
-        self.model.avgpool = nn.AdaptiveAvgPool3d(output_size=(len(labels[country]), 8, 8))
+        self.model.conv1 = nn.Conv2d(inC, 64, kernel_size = (7,7), stride = (2,2), padding = (3,3), bias = False)
+        self.model.avgpool = nn.AdaptiveAvgPool3d(output_size=(outC, 8, 8))
         self.model.fc = nn.Identity()
 
     def forward(self, x):
         return (torch.reshape(torch.sigmoid(self.model(x)),
-                (x.shape[0],len(labels[self.country]),8,8))-0.5)/0.5
+                (x.shape[0],self.outC,8,8))-0.5)/0.5
     
 # class Segmentation(pl.LightningModule):
 #     def __init__(self,
