@@ -110,6 +110,7 @@ class OpenSendaiBenchDatasetGlobal(Dataset):
                  obsvariables_path: str, 
                  FilePathList: list, 
                  bldgtype: str,
+                 signal: list,
                  lognorm_dist_list: dict, 
                  transform: transforms = None):
         """
@@ -123,7 +124,7 @@ class OpenSendaiBenchDatasetGlobal(Dataset):
         self.bldgtype = bldgtype
         self.lognorm_dist_list = lognorm_dist_list
         self.transform = transform
-        self.signal = ['VH', 'VV', 'aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2']
+        self.signal = signal #['VH', 'VV', 'aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2']
 
     def __len__(self):
         """
