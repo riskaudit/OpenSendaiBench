@@ -16,6 +16,7 @@ from util import OpenSendaiBenchDatasetGlobal, fitlognorm
 from model import ModifiedResNet50
 
 from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 from datetime import datetime
 import numpy as np
 import glob
@@ -28,6 +29,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
 import pytorch_lightning as pl
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
 device = torch.device("mps")
 # %% lognorm fit - can be integrated inside the for-loop (for next step)
@@ -42,7 +44,8 @@ groundtruth_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/grou
 ratio_train = 0.8
 ratio_val = 0.1
 ratio_test = 0.1
-# %%
+arg_inputs = ['S2'] # ['S1', 'S1+S2', 'S2']
+# %%a
 for i in range(len(bldgtype_list)):
     # %%
     bldgtype = bldgtype_list[i]
@@ -50,44 +53,72 @@ for i in range(len(bldgtype_list)):
     TrainFile = []
     TestFile = []
     ValidFile = []
-    for j in range(len(signals)):
-        country = list(labels.keys())[j]
-        if 'VV' in signals[country] and bldgtype in labels[country]:
-            a = glob.glob(str(groundtruth_path+country+'*/tiles/images/'+country+'_nbldg_'+bldgtype+'_'+'*.tif'))
-            a.sort()
+    for j in range(len(signals)): # country index
+        country = list(labels.keys())[j] # select country
 
-            f_remaining, f_test = train_test_split(a, test_size=ratio_test,random_state=j)
-            ratio_remaining = 1 - ratio_test
-            ratio_val_adjusted = ratio_val / ratio_remaining
-            f_train, f_val = train_test_split(f_remaining, test_size=ratio_val_adjusted,random_state=j)
+        # this gets the filename of ground truth, not obsvariables
+        if 'S1+S2' in arg_inputs or 'S1' in arg_inputs:
+            if 'VV' in signals[country] and bldgtype in labels[country]:
+                a = glob.glob(str(groundtruth_path+country+'*/tiles/images/'+country+'_nbldg_'+bldgtype+'_'+'*.tif'))
+                a.sort()
 
-            TrainFile += f_train
-            TestFile += f_test
-            ValidFile += f_val
+                f_remaining, f_test = train_test_split(a, test_size=ratio_test,random_state=j)
+                ratio_remaining = 1 - ratio_test
+                ratio_val_adjusted = ratio_val / ratio_remaining
+                f_train, f_val = train_test_split(f_remaining, test_size=ratio_val_adjusted,random_state=j)
+
+                TrainFile += f_train
+                TestFile += f_test
+                ValidFile += f_val
+        elif 'S2' in arg_inputs:
+            if bldgtype in labels[country]: # because we all know the S2 exists for all countries
+                a = glob.glob(str(groundtruth_path+country+'*/tiles/images/'+country+'_nbldg_'+bldgtype+'_'+'*.tif'))
+                a.sort()
+
+                f_remaining, f_test = train_test_split(a, test_size=ratio_test,random_state=j)
+                ratio_remaining = 1 - ratio_test
+                ratio_val_adjusted = ratio_val / ratio_remaining
+                f_train, f_val = train_test_split(f_remaining, test_size=ratio_val_adjusted,random_state=j)
+
+                TrainFile += f_train
+                TestFile += f_test
+                ValidFile += f_val
+
 
     # %%
     train_ds = OpenSendaiBenchDatasetGlobal(obsvariables_path = 
                                             '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
                                             FilePathList = TrainFile,
                                             bldgtype = bldgtype,
+                                            signal = ['aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2'],
                                             lognorm_dist_list = lognorm_dist_list)
     test_ds  = OpenSendaiBenchDatasetGlobal(obsvariables_path = 
                                             '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
                                             FilePathList = TestFile,
                                             bldgtype = bldgtype,
+                                            signal = ['aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2'],
                                             lognorm_dist_list = lognorm_dist_list)
     valid_ds = OpenSendaiBenchDatasetGlobal(obsvariables_path = 
                                             '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
                                             FilePathList = ValidFile,
                                             bldgtype = bldgtype,
+                                            signal = ['aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2'],
                                             lognorm_dist_list = lognorm_dist_list)
-    train_dl = DataLoader(train_ds, batch_size=20, shuffle=True)
+    train_dl = DataLoader(train_ds, batch_size=64, shuffle=True, num_workers=0, pin_memory=True)
     test_dl  = DataLoader(test_ds)
-    valid_dl = DataLoader(valid_ds)
+    valid_dl = DataLoader(valid_ds, num_workers=0, pin_memory=True)
     # %%
-    loss_func = nn.L1Loss()
+    loss_func = nn.MSELoss() 
     iterator = iter(train_dl)
-    model = ModifiedResNet50(inC= 14, 
+    if 'S1+S2' in arg_inputs:
+        inC = 14
+    elif 'S1' in arg_inputs:
+        inC = 2
+    elif 'S2' in arg_inputs:
+        inC = 12
+
+    # %%
+    model = ModifiedResNet50(inC= inC, 
                              outC= 1).to(device)
     # %%
     opt = optim.Adam(model.parameters(), lr=1e-4)
@@ -98,28 +129,38 @@ for i in range(len(bldgtype_list)):
                                         end_factor=0.3, 
                                         total_iters=10)
     # %%
-    class RMSELoss(nn.Module):
-        def __init__(self, eps=1e-6):
+    class MSE(nn.Module):
+        def __init__(self):
             super().__init__()
             self.mse = nn.MSELoss()
-            self.eps = eps
         def forward(self,yhat,y):
-            loss = torch.sqrt(self.mse(yhat,y) + self.eps)
-            return loss
-    rmse = RMSELoss()
+            mse = self.mse(yhat,y)
+            return mse
+    class MAE(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.mae = nn.L1Loss()
+        def forward(self,yhat,y):
+            mae = self.mae(yhat,y)
+            return mae
+    mae_class = MAE()
+    mse_class = MSE()
+    def checkpoint(model, filename):
+        torch.save(model.state_dict(), filename)
     def metrics_batch(target, output):
-        return rmse(output,target)
+        return mae_class(output,target), mse_class(output,target) 
     def loss_batch(loss_func, xb, yb,yb_h, opt=None):
         loss = loss_func(yb_h, yb)
-        metric_b = metrics_batch(yb,yb_h)
+        mae_b, mse_b = metrics_batch(yb,yb_h)
         if opt is not None:
             loss.backward()
             opt.step()
             opt.zero_grad()
-        return loss.item(), metric_b
+        return loss.item(), mae_b, mse_b
     def loss_epoch(model,loss_func,dataset_dl,opt=None):
         loss=0.0
-        metric=0.0
+        mae_out=0.0
+        mse_out=0.0
         iterator = iter(dataset_dl)
         len_data = len(dataset_dl.dataset)
         for batch_idx in range(len(train_dl)):
@@ -127,32 +168,39 @@ for i in range(len(bldgtype_list)):
             xb = data_batch['obsvariable'].type(torch.float).to(device)
             yb = data_batch['groundtruth'].type(torch.float).to(device)
             yb_h = model(xb)
-            loss_b,metric_b=loss_batch(loss_func, xb, yb,yb_h, opt)
+            loss_b,mae_b,mse_b=loss_batch(loss_func, xb, yb,yb_h, opt)
             loss+=loss_b
-            if metric_b is not None:
-                metric+=metric_b
+            if a is not None:
+                mae_out+=mae_b
+                mse_out+=mse_b
         scheduler.step()
         loss/=len_data
-        metric/=len_data
-        return loss, metric
-    def train_val(epochs, model, loss_func, opt, train_dl, val_dl):
+        mae_out/=len_data
+        mse_out/=len_data
+        return loss, mae_out, mse_out
+    def train_val(epochs, model, loss_func, opt, train_dl, test_dl, val_dl):
         for epoch in range(epochs):
             model.train()
-            train_loss, train_metric=loss_epoch(model,loss_func,train_dl,opt)
+            train_loss, train_mae, train_mse=loss_epoch(model,loss_func,train_dl,opt)
             model.eval()
             with torch.no_grad():
-                val_loss, val_metric=loss_epoch(model,loss_func,val_dl)
-            accuracy=val_metric #100*val_metric
-            print("epoch: %d, train loss: %.10f, val loss: %.10f, rmse: %.6f" %(epoch, train_loss,val_loss,accuracy))
+                val_loss, val_mae, val_mse =loss_epoch(model,loss_func,val_dl)
+                test_loss, test_mae, test_mse=loss_epoch(model,loss_func,test_dl)
+            val_mae_out = val_mae #100*val_metric
+            val_mse_out = val_mse
+            test_mae_out = test_mae
+            test_mse_out = test_mse
+            print("epoch: %d, train loss MSE: %.6f, val loss MSE: %.6f, test_mae: %.6f, test_mse: %.6f, val_mae: %.6f, val_mse: %.6f" 
+                  %(epoch, train_loss,val_loss,test_mae_out,test_mse_out,val_mae_out,val_mse_out))
     # %%
     model.train()
-    num_epochs = 10
+    num_epochs = 100
     train_val(num_epochs,  model.to(device), loss_func, 
-                opt, train_dl, val_dl=valid_dl)
+                opt, train_dl, test_dl, valid_dl)
     # %%
     path2weights=str("./models/weights_"
                        +datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
-                    +"_epoch_"+str(num_epochs)+".pt")
+                    +"_epoch_"+str(num_epochs)+"_bldgtype_"+bldgtype+"_MSEloss_MAE_MSE_S2only.pt")
     torch.save(model.state_dict(), path2weights)
     # %%
     _model = model #UNet(n_class=len(labels['AFG']))
@@ -160,8 +208,6 @@ for i in range(len(bldgtype_list)):
     _model.load_state_dict(weights)
     _model.eval()
     _model.to(device)
-    # %%
-    import matplotlib.pyplot as plt
     # %%
     iterator = iter(test_dl)
     # %%

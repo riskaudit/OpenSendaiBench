@@ -1,8 +1,13 @@
+from typing import Any
+from pytorch_lightning.utilities.types import STEP_OUTPUT
 from constants import labels, signals
 
 import torch
 import torch.nn as nn
 from torchvision import models
+import pytorch_lightning as pl
+
+device = torch.device("mps")
 
 class RMSELoss(nn.Module):
     def __init__(self, eps=1e-6):
@@ -12,7 +17,7 @@ class RMSELoss(nn.Module):
     def forward(self,yhat,y):
         loss = torch.sqrt(self.mse(yhat,y) + self.eps)
         return loss
-    
+
 class ModifiedResNet50(nn.Module):
     def __init__(self, inC: int, outC: int):
         super(ModifiedResNet50, self).__init__()
