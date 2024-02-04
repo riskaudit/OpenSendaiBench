@@ -56,7 +56,7 @@ class OpenSendaiBenchDataset(Dataset):
                                     str(k)+'_'+'of_*/2019*_'+self.signal[s]+'.tif')):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
                 a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
-                obsvariable[s,:,:] = a.reshape(1,a.shape[0],a.shape[1])
+                obsvariable[s,:,:] = np.nan_to_num(a.reshape(1,a.shape[0],a.shape[1]))
                 
         groundtruth = np.zeros([len(labels[self.country]),8,8])
         for w in range(len(labels[self.country])): 
@@ -64,7 +64,7 @@ class OpenSendaiBenchDataset(Dataset):
                                       self.country+'*/tiles/images/'+
                                       self.country+'_nbldg_'+labels[self.country][w]+'_'+str(k)+'_'+'of_'+'*.tif')):
                 a = cv2.imread(file, cv2.IMREAD_UNCHANGED)
-                groundtruth[w,:,:] = self.lognorm_dist[labels[self.country][w]]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1]))
+                groundtruth[w,:,:] = np.nan_to_num(self.lognorm_dist[labels[self.country][w]]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1])))
 
         obsvariable = torch.from_numpy(obsvariable).float() #.unsqueeze(0)
         # obsvariable_8x8 = torch.from_numpy(obsvariable_8x8).float()
@@ -158,10 +158,10 @@ class OpenSendaiBenchDatasetGlobal(Dataset):
                                     str(k)+'_'+'of_*/2019*_'+self.signal[s]+'.tif')):
                 a = cv2.imread(file2, cv2.IMREAD_UNCHANGED)
                 a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
-                obsvariable[s,:,:] = a.reshape(1,a.shape[0],a.shape[1])
+                obsvariable[s,:,:] = np.nan_to_num(a.reshape(1,a.shape[0],a.shape[1]))
 
         a = cv2.imread(file1, cv2.IMREAD_UNCHANGED)
-        groundtruth = self.lognorm_dist_list[country][self.bldgtype]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1]))
+        groundtruth = np.nan_to_num(self.lognorm_dist_list[country][self.bldgtype]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1])))
 
         obsvariable = torch.from_numpy(obsvariable).float() 
         groundtruth = torch.from_numpy(groundtruth).float() 
