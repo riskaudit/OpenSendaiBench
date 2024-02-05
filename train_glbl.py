@@ -41,9 +41,9 @@ bldgtype_group_list = {'grp1': ['C3L', 'C3M', 'C3H'],
                          'grp2': ['W', 'W1', 'W2', 'W3', 'W5']}
 obsvariables_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/'
 groundtruth_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/'
-ratio_train = 0.8
-ratio_val = 0.1
-ratio_test = 0.1
+ratio_train = 0.6
+ratio_val = 0.2
+ratio_test = 0.2
 arg_inputs = ['S2'] # ['S1', 'S1+S2', 'S2']
 # %%a
 for i in range(len(bldgtype_list)):
@@ -90,19 +90,25 @@ for i in range(len(bldgtype_list)):
                                             '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
                                             FilePathList = TrainFile,
                                             bldgtype = bldgtype,
-                                            signal = ['aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2'],
+                                            signal = ['RGB'], #'VV', 'VH'],#,'RGB'],
+                                            # signal = ['VV', 'green', 'red'],
+                                            # signal = ['aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2'],
                                             lognorm_dist_list = lognorm_dist_list)
     test_ds  = OpenSendaiBenchDatasetGlobal(obsvariables_path = 
                                             '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
                                             FilePathList = TestFile,
                                             bldgtype = bldgtype,
-                                            signal = ['aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2'],
+                                            signal = ['RGB'], #'VV', 'VH'],#,'RGB'],
+                                            # signal = ['VV', 'green', 'red'],
+                                            # signal = ['aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2'],
                                             lognorm_dist_list = lognorm_dist_list)
     valid_ds = OpenSendaiBenchDatasetGlobal(obsvariables_path = 
                                             '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/',
                                             FilePathList = ValidFile,
                                             bldgtype = bldgtype,
-                                            signal = ['aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2'],
+                                            signal = ['RGB'], #'VV', 'VH'],#,'RGB'],
+                                            # signal = ['VV', 'green', 'red'],
+                                            # signal = ['aerosol', 'blue', 'green', 'red', 'red1', 'red2', 'red3', 'nir', 'red4', 'vapor', 'swir1', 'swir2'],
                                             lognorm_dist_list = lognorm_dist_list)
     train_dl = DataLoader(train_ds, batch_size=64, shuffle=True, num_workers=0, pin_memory=True)
     test_dl  = DataLoader(test_ds)
@@ -111,11 +117,11 @@ for i in range(len(bldgtype_list)):
     loss_func = nn.MSELoss() 
     iterator = iter(train_dl)
     if 'S1+S2' in arg_inputs:
-        inC = 14
+        inC = 5
     elif 'S1' in arg_inputs:
         inC = 2
     elif 'S2' in arg_inputs:
-        inC = 12
+        inC = 3 #12
 
     # %%
     model = ModifiedResNet50(inC= inC, 
@@ -194,7 +200,7 @@ for i in range(len(bldgtype_list)):
                   %(epoch, train_loss,val_loss,test_mae_out,test_mse_out,val_mae_out,val_mse_out))
     # %%
     model.train()
-    num_epochs = 100
+    num_epochs = 30
     train_val(num_epochs,  model.to(device), loss_func, 
                 opt, train_dl, test_dl, valid_dl)
     # %%
@@ -233,7 +239,7 @@ for i in range(len(bldgtype_list)):
     plt.setp(plt.gcf().get_axes(), xticks=[], yticks=[])
     cbar = fig.colorbar(f, shrink=0.95)
     cbar = fig.colorbar(f1, shrink=0.95)
-    fig.savefig(str('global_cdf_'+bldgtype+'.png'),
+    fig.savefig(str('global_cdf_'+bldgtype+'_S2.png'),
                 bbox_inches='tight')
 
     ### nbldg charts
@@ -268,5 +274,67 @@ for i in range(len(bldgtype_list)):
                             ticks=[0, max_value],
                             orientation="vertical", shrink=0.95)
     # plot
-    fig1.savefig(str('global_nbldg_'+bldgtype+'.png'),
+    fig1.savefig(str('global_nbldg_'+bldgtype+'_S2.png'),
                     bbox_inches='tight')
+# %% sample dhaka
+import cv2
+import rasterio
+from rasterio.features import shapes
+import geopandas as gpd
+
+vh_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/SENTINEL1-DUAL_POL_GRD_HIGH_RES/BGD_oed_exposure_20200811/BGD_al/2019_VH_LEVEL2_DHAKA_MERGED.tif'
+imVH = rasterio.open(vh_path).read(1)
+
+vv_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/SENTINEL1-DUAL_POL_GRD_HIGH_RES/BGD_oed_exposure_20200811/BGD_al/2019_VV_LEVEL2_DHAKA_MERGED.tif'
+imVV = rasterio.open(vv_path).read(1)
+
+rgb_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/obsvariables/METEOR_PROJECT_2002/SENTINEL-2-MSI_LVL2A/BGD_oed_exposure_20200811/BGD_al/2019_RGB_LEVEL2_DHAKA_MERGED.tif'
+imrgb = rasterio.open(rgb_path).read()
+metaRGB = rasterio.open(rgb_path).meta
+
+imVH = imVH[0:imrgb.shape[1],0:imrgb.shape[2]]
+imVV = imVV[0:imrgb.shape[1],0:imrgb.shape[2]]
+
+gt_path = '/Users/joshuadimasaka/Desktop/PhD/GitHub/riskaudit/data/groundtruth/METEOR_PROJECT_2002/BGD_oed_exposure_20200811/attr_rasterized/BGD_nbldg_INF.tif'
+imGT = rasterio.open(gt_path).read(1)
+# %%
+width = 372
+n_tiles_x = int(np.floor(imVH.shape[1]/372))
+n_tiles_y = int(np.floor(imVH.shape[0]/372))
+outArray = np.zeros(imVH.shape)
+temp = np.zeros((1,2,368,368))
+lognorm_dist = lognorm_dist_list['BGD']['INF']['modelfit']
+
+for irow in range(n_tiles_y):
+    for icol in range(n_tiles_x):
+        x_left = icol*width+5
+        x_right = (width*(icol+1))+5
+        y_top = irow*width+21
+        y_bot = (width*(irow+1))+21
+
+        sub_imVH = imVH[y_top:y_bot,x_left:x_right]
+        sub_imVV = imVV[y_top:y_bot,x_left:x_right]
+        sub_imVH = cv2.resize(sub_imVH, (368,368), 
+                              interpolation = cv2.INTER_NEAREST)
+        sub_imVV = cv2.resize(sub_imVV, (368,368), 
+                              interpolation = cv2.INTER_NEAREST)
+        temp[0,0,:,:] = sub_imVV
+        temp[0,1,:,:] = sub_imVH
+
+        # a = imrgb[:,y_top:y_bot,x_left:x_right]
+        # for x in range(3):
+        #     b = cv2.resize(a[x,:,:], (368,368), 
+        #                    interpolation = cv2.INTER_NEAREST)
+        #     temp[0,x+2,:,:] = np.nan_to_num(b.reshape(1,b.shape[0],b.shape[1]))
+
+
+        yb_h = _model(torch.from_numpy(temp.astype(np.float32)).to(device))
+        n_bldg = lognorm_dist.ppf(yb_h[0,0,:,:].cpu().detach().numpy()).round()
+        n_bldg_orig = cv2.resize(n_bldg, (372,372), 
+                              interpolation = cv2.INTER_NEAREST)
+        
+        outArray[y_top:y_bot,x_left:x_right] = n_bldg_orig
+
+with rasterio.open('./outputTEST_data_reacquired_S2.tif', 'w', **metaRGB) as dst:
+    dst.write(outArray, indexes = 1)
+# %%
