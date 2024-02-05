@@ -2,6 +2,7 @@ import os
 import re
 import glob
 import cv2
+import rasterio
 import scipy
 import torch
 import numpy as np
@@ -151,14 +152,21 @@ class OpenSendaiBenchDatasetGlobal(Dataset):
         end = file1.find('_of_', start)
         k = file1[start:end]
 
-        obsvariable = np.zeros([len(self.signal),368,368])
+        obsvariable = np.zeros([3,368,368]) # to modify later
         for s in range(len(self.signal)):
             for file2 in glob.glob(str(self.obsvariables_path+
                                     '**/'+country+'_*/'+country+'_'+
                                     str(k)+'_'+'of_*/2019*_'+self.signal[s]+'.tif')):
-                a = cv2.imread(file2, cv2.IMREAD_UNCHANGED)
-                a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
-                obsvariable[s,:,:] = np.nan_to_num(a.reshape(1,a.shape[0],a.shape[1]))
+                if self.signal[s] == 'RGB':
+                    a = rasterio.open(file2).read()
+                    for x in range(3):
+                        b = cv2.resize(a[x,:,:], (368,368), interpolation = cv2.INTER_NEAREST)
+                        obsvariable[x,:,:] = np.nan_to_num(b.reshape(1,b.shape[0],b.shape[1]))
+                else:
+                    a = cv2.imread(file2, cv2.IMREAD_UNCHANGED)
+                    a = cv2.resize(a, (368,368), interpolation = cv2.INTER_NEAREST)
+                    obsvariable[s,:,:] = np.nan_to_num(a.reshape(1,a.shape[0],a.shape[1]))
+
 
         a = cv2.imread(file1, cv2.IMREAD_UNCHANGED)
         groundtruth = np.nan_to_num(self.lognorm_dist_list[country][self.bldgtype]['modelfit'].cdf(a.reshape(1,a.shape[0],a.shape[1])))
