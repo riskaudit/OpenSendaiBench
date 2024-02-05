@@ -302,7 +302,7 @@ width = 372
 n_tiles_x = int(np.floor(imVH.shape[1]/372))
 n_tiles_y = int(np.floor(imVH.shape[0]/372))
 outArray = np.zeros(imVH.shape)
-temp = np.zeros((1,2,368,368))
+temp = np.zeros((1,3,368,368))
 lognorm_dist = lognorm_dist_list['BGD']['INF']['modelfit']
 
 for irow in range(n_tiles_y):
@@ -312,20 +312,20 @@ for irow in range(n_tiles_y):
         y_top = irow*width+21
         y_bot = (width*(irow+1))+21
 
-        sub_imVH = imVH[y_top:y_bot,x_left:x_right]
-        sub_imVV = imVV[y_top:y_bot,x_left:x_right]
-        sub_imVH = cv2.resize(sub_imVH, (368,368), 
-                              interpolation = cv2.INTER_NEAREST)
-        sub_imVV = cv2.resize(sub_imVV, (368,368), 
-                              interpolation = cv2.INTER_NEAREST)
-        temp[0,0,:,:] = sub_imVV
-        temp[0,1,:,:] = sub_imVH
+        # sub_imVH = imVH[y_top:y_bot,x_left:x_right]
+        # sub_imVV = imVV[y_top:y_bot,x_left:x_right]
+        # sub_imVH = cv2.resize(sub_imVH, (368,368), 
+        #                       interpolation = cv2.INTER_NEAREST)
+        # sub_imVV = cv2.resize(sub_imVV, (368,368), 
+        #                       interpolation = cv2.INTER_NEAREST)
+        # temp[0,0,:,:] = sub_imVV
+        # temp[0,1,:,:] = sub_imVH
 
-        # a = imrgb[:,y_top:y_bot,x_left:x_right]
-        # for x in range(3):
-        #     b = cv2.resize(a[x,:,:], (368,368), 
-        #                    interpolation = cv2.INTER_NEAREST)
-        #     temp[0,x+2,:,:] = np.nan_to_num(b.reshape(1,b.shape[0],b.shape[1]))
+        a = imrgb[:,y_top:y_bot,x_left:x_right]
+        for x in range(3):
+            b = cv2.resize(a[x,:,:], (368,368), 
+                           interpolation = cv2.INTER_NEAREST)
+            temp[0,x,:,:] = np.nan_to_num(b.reshape(1,b.shape[0],b.shape[1]))
 
 
         yb_h = _model(torch.from_numpy(temp.astype(np.float32)).to(device))
